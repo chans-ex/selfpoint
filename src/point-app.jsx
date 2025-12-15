@@ -224,7 +224,7 @@ export default function App() {
           mismatch: false,
           transactions: [],
           lastDate: '',
-          lastOrderNo: '' //추가 
+          lastOrderNo: '' 
         });
       }
       const user = map.get(id);
