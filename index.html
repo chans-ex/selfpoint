@@ -85,12 +85,13 @@
         prevData.sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||'')).forEach(r => userLast.set(r['고객ID'], Number(r['토탈포인트'])||0));
         return Array.from(userLast.values()).reduce((s,v) => s+v, 0);
       }, [validData, selectedMonth]);
-
-      const monthlyTotals = useMemo(() => {
-        let used=0, earned=0;
-        monthlyData.forEach(r => { const p = Number(r['포인트'])||0; if(r['타입']==='사용') used+=p; else earned+=p; });
+      
+const monthlyTotals = useMemo(() => {
+  let used=0, earned=0;
+  monthlyData.forEach(r => { const p = Number(r['포인트'])||0; if(r['타입']==='사용') used+=p; });
+  earnData.forEach(r => { earned += Number(r['포인트'])||0; });
         return { used, earned, carryover: carryoverPoint, balance: carryoverPoint + earned + used };
-      }, [monthlyData, carryoverPoint]);
+      }, [monthlyData, earnData, carryoverPoint);
 
       const earnByType = useMemo(() => {
         const map = new Map();
@@ -317,5 +318,6 @@
   </script>
 </body>
 </html>
+
 
 
