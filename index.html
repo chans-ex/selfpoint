@@ -23,6 +23,8 @@
       'TMPDS77970861beae492', 'TMPDS28c045ff094843a', 'TMPDS4ccba6a2a15040e',
       'TMPDS731a0fb561354e0', 'TMPDS9fb6acec8fe14b8', 'TMPDSa9f21742c6e1b84',
       'TMPDSe5a4afa77d6346f', 'TMPDS1e7083124613423', 'TMPDSabb9d72cecd244d',
+      'TMPDS4ecbd717abc5486', 'TMPDS87a0f273848f4d2', 'TMPDSc788cf5178fa428',
+      'dongatest',
     ];
 
     function App() {
@@ -62,6 +64,10 @@
       const validData = useMemo(() => showCanceled ? realData : realData.filter(item => item['주문상태'] !== '취소완료'), [realData, showCanceled]);
       const canceledCount = useMemo(() => realData.filter(item => item['주문상태'] === '취소완료').length, [realData]);
       const monthlyData = useMemo(() => !selectedMonth ? validData : validData.filter(row => (row['처리일'] || '').startsWith(selectedMonth.replace('-', '/'))), [validData, selectedMonth]);
+      
+      // 사용자별 검증용: 취소완료 포함된 월별 데이터
+      const monthlyAllData = useMemo(() => !selectedMonth ? realData : realData.filter(row => (row['처리일'] || '').startsWith(selectedMonth.replace('-', '/'))), [realData, selectedMonth]);
+      
       const availableMonths = useMemo(() => { const m = new Set(); validData.forEach(r => { const d = r['처리일'] || ''; const match = d.match(/(\d{4})\/(\d{2})/); if(match) m.add(match[1]+'-'+match[2]); }); return Array.from(m).sort().reverse(); }, [validData]);
       const earnData = useMemo(() => monthlyData.filter(r => r['타입'] !== '사용'), [monthlyData]);
       const useData = useMemo(() => monthlyData.filter(r => r['타입'] === '사용'), [monthlyData]);
@@ -102,6 +108,7 @@
         })).sort((a,b) => b.totalPoint - a.totalPoint);
       }, [earnData]);
 
+      // 업체별: CS 수동차감 제일 뒤로
       const companyStats = useMemo(() => {
         const map = new Map();
         useData.forEach(row => {
@@ -112,30 +119,50 @@
           map.get(company).usedPoint += point;
           map.get(company).users.add(userId);
         });
-        return Array.from(map.values()).map(c => ({ company: c.company, usedPoint: c.usedPoint, userCount: c.users.size })).sort((a,b) => a.usedPoint - b.usedPoint);
+        return Array.from(map.values()).map(c => ({ company: c.company, usedPoint: c.usedPoint, userCount: c.users.size })).sort((a,b) => {
+          if (a.company === 'CS 수동차감') return 1;
+          if (b.company === 'CS 수동차감') return -1;
+          return a.usedPoint - b.usedPoint;
+        });
       }, [useData]);
 
+      // 상품별: CS 수동차감 하나로 합침
       const productStats = useMemo(() => {
         const map = new Map();
         useData.forEach(row => {
           const productCode = row['상품코드'] || '';
-          const company = row['업체명'] || 'CS 수동차감';
+          const company = row['업체명'] || '';
+          const point = Number(row['포인트']) || 0;
+          const userId = row['고객ID'];
+          
+          // 상품코드 없으면 CS 수동차감으로 합침
+          if (!productCode) {
+            const key = '__CS_MANUAL__';
+            if (!map.has(key)) map.set(key, { productCode: '-', company: 'CS 수동차감', productName: '(수동 차감 합계)', usedPoint: 0, users: new Set() });
+            map.get(key).usedPoint += point;
+            map.get(key).users.add(userId);
+            return;
+          }
+          
           const memo = row['사용자메모'] || row['관리자메모'] || '';
           const match = memo.match(/상품명\(([^)]+)\)/);
           const productName = match ? match[1] : (memo || '-');
-          const point = Number(row['포인트']) || 0;
-          const userId = row['고객ID'];
-          const key = productCode || memo || 'unknown';
-          if (!map.has(key)) map.set(key, { productCode: productCode || '-', company, productName, usedPoint: 0, users: new Set() });
+          const key = productCode;
+          if (!map.has(key)) map.set(key, { productCode, company: company || '-', productName, usedPoint: 0, users: new Set() });
           map.get(key).usedPoint += point;
           map.get(key).users.add(userId);
         });
-        return Array.from(map.values()).map(p => ({ productCode: p.productCode, company: p.company, productName: p.productName, usedPoint: p.usedPoint, userCount: p.users.size })).sort((a,b) => a.usedPoint - b.usedPoint);
+        return Array.from(map.values()).map(p => ({ productCode: p.productCode, company: p.company, productName: p.productName, usedPoint: p.usedPoint, userCount: p.users.size })).sort((a,b) => {
+          if (a.productCode === '-') return 1;
+          if (b.productCode === '-') return -1;
+          return a.usedPoint - b.usedPoint;
+        });
       }, [useData]);
 
+      // 사용자별: 취소완료 포함해서 계산
       const userStats = useMemo(() => {
         const map = new Map();
-        const sorted = [...monthlyData].sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+        const sorted = [...monthlyAllData].sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
         sorted.forEach(row => {
           const id = row['고객ID'], name = row['고객명'], point = Number(row['포인트'])||0, total = Number(row['토탈포인트'])||0, type = row['타입'], date = row['처리일']||'';
           if (!map.has(id)) map.set(id, { id, name, startPoint:0, earnedPoint:0, usedPoint:0, currentPoint:0, calculatedPoint:0, mismatch:false, transactions:[], lastDate:'', lastOrderNo:'' });
@@ -148,26 +175,26 @@
           u.transactions.push({ date, type, point, total, memo: row['사용자메모'] || row['관리자메모'] || '', status: row['주문상태'] || '' });
         });
         if (selectedMonth) {
-          const prevData = validData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+          // 이전 데이터도 취소완료 포함
+          const prevData = realData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
           const prevUser = new Map();
           prevData.forEach(r => prevUser.set(r['고객ID'], Number(r['토탈포인트'])||0));
           map.forEach((u, id) => {
             if (prevUser.has(id)) u.startPoint = prevUser.get(id);
-            else if (u.transactions.length > 0) { 
-  const sorted = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
-  const firstDate = sorted[0].date;
-  // 같은 시간에 여러 건이면 가장 낮은 토탈에서 그 시간의 모든 포인트 합을 뺌
-  const sameDateTx = sorted.filter(t => t.date === firstDate);
-  const minTotal = Math.min(...sameDateTx.map(t => t.total));
-  const sumPoints = sameDateTx.reduce((s, t) => s + t.point, 0);
-  u.startPoint = minTotal - sumPoints;
-}
+            else if (u.transactions.length > 0) {
+              const sortedTx = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
+              const firstDate = sortedTx[0].date;
+              const sameDateTx = sortedTx.filter(t => t.date === firstDate);
+              const minTotal = Math.min(...sameDateTx.map(t => t.total));
+              const sumPoints = sameDateTx.reduce((s, t) => s + t.point, 0);
+              u.startPoint = minTotal - sumPoints;
+            }
             u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
         }
         return Array.from(map.values()).filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0).sort((a,b) => a.usedPoint - b.usedPoint);
-      }, [monthlyData, validData, selectedMonth]);
+      }, [monthlyAllData, realData, selectedMonth]);
 
       const mismatchCount = useMemo(() => userStats.filter(u => u.mismatch).length, [userStats]);
       const filteredEarnByType = useMemo(() => !searchTerm ? earnByType : earnByType.filter(e => e.memo.toLowerCase().includes(searchTerm.toLowerCase())), [earnByType, searchTerm]);
@@ -285,5 +312,4 @@
   </script>
 </body>
 </html>
-
 
