@@ -153,7 +153,15 @@
           prevData.forEach(r => prevUser.set(r['고객ID'], Number(r['토탈포인트'])||0));
           map.forEach((u, id) => {
             if (prevUser.has(id)) u.startPoint = prevUser.get(id);
-            else if (u.transactions.length > 0) { const first = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date))[0]; u.startPoint = first.total - first.point; }
+            else if (u.transactions.length > 0) { 
+  const sorted = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
+  const firstDate = sorted[0].date;
+  // 같은 시간에 여러 건이면 가장 낮은 토탈에서 그 시간의 모든 포인트 합을 뺌
+  const sameDateTx = sorted.filter(t => t.date === firstDate);
+  const minTotal = Math.min(...sameDateTx.map(t => t.total));
+  const sumPoints = sameDateTx.reduce((s, t) => s + t.point, 0);
+  u.startPoint = minTotal - sumPoints;
+}
             u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
@@ -277,4 +285,5 @@
   </script>
 </body>
 </html>
+
 
