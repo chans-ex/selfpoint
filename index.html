@@ -10,7 +10,7 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 </head>
-<body>
+<body style="margin:0; background:#f8f9fa;">
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useMemo, Fragment } = React;
@@ -35,6 +35,7 @@
       const [showCanceled, setShowCanceled] = useState(false);
       const [expandedUser, setExpandedUser] = useState(null);
       const [expandedEarn, setExpandedEarn] = useState(null);
+      const [showMismatchOnly, setShowMismatchOnly] = useState(false);
 
       const handleFileUpload = (e) => {
         const file = e.target.files[0];
@@ -47,92 +48,37 @@
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(sheet);
             setData(jsonData);
-            
             if (jsonData.length > 0) {
               const firstDate = jsonData[0]['처리일'] || '';
               const match = firstDate.match(/(\d{4})\/(\d{2})/);
-              if (match) {
-                setSelectedMonth(match[1] + '-' + match[2]);
-              }
+              if (match) setSelectedMonth(match[1] + '-' + match[2]);
             }
-          } catch (err) {
-            console.error(err);
-          }
+          } catch (err) { console.error(err); }
         };
         reader.readAsArrayBuffer(file);
       };
 
-      const realData = useMemo(() => {
-        return data.filter(item => !TEST_IDS.includes(item['고객ID']));
-      }, [data]);
-
-      const validData = useMemo(() => {
-        if (showCanceled) return realData;
-        return realData.filter(item => item['주문상태'] !== '취소완료');
-      }, [realData, showCanceled]);
-
-      const canceledCount = useMemo(() => {
-        return realData.filter(item => item['주문상태'] === '취소완료').length;
-      }, [realData]);
-
-      const monthlyData = useMemo(() => {
-        if (!selectedMonth) return validData;
-        return validData.filter(row => {
-          const date = row['처리일'] || '';
-          return date.startsWith(selectedMonth.replace('-', '/'));
-        });
-      }, [validData, selectedMonth]);
-
-      const availableMonths = useMemo(() => {
-        const months = new Set();
-        validData.forEach(row => {
-          const date = row['처리일'] || '';
-          const match = date.match(/(\d{4})\/(\d{2})/);
-          if (match) {
-            months.add(match[1] + '-' + match[2]);
-          }
-        });
-        return Array.from(months).sort().reverse();
-      }, [validData]);
-
+      const realData = useMemo(() => data.filter(item => !TEST_IDS.includes(item['고객ID'])), [data]);
+      const validData = useMemo(() => showCanceled ? realData : realData.filter(item => item['주문상태'] !== '취소완료'), [realData, showCanceled]);
+      const canceledCount = useMemo(() => realData.filter(item => item['주문상태'] === '취소완료').length, [realData]);
+      const monthlyData = useMemo(() => !selectedMonth ? validData : validData.filter(row => (row['처리일'] || '').startsWith(selectedMonth.replace('-', '/'))), [validData, selectedMonth]);
+      const availableMonths = useMemo(() => { const m = new Set(); validData.forEach(r => { const d = r['처리일'] || ''; const match = d.match(/(\d{4})\/(\d{2})/); if(match) m.add(match[1]+'-'+match[2]); }); return Array.from(m).sort().reverse(); }, [validData]);
       const earnData = useMemo(() => monthlyData.filter(r => r['타입'] !== '사용'), [monthlyData]);
       const useData = useMemo(() => monthlyData.filter(r => r['타입'] === '사용'), [monthlyData]);
 
       const carryoverPoint = useMemo(() => {
         if (!selectedMonth) return 0;
-        const prevData = validData.filter(row => {
-          const date = row['처리일'] || '';
-          const rowMonth = date.substring(0, 7).replace('/', '-');
-          return rowMonth < selectedMonth;
-        });
+        const prevData = validData.filter(row => { const d = row['처리일'] || ''; return d.substring(0,7).replace('/','-') < selectedMonth; });
         if (prevData.length === 0) return 0;
-        
-        const userLastTotal = new Map();
-        prevData
-          .sort((a, b) => (a['처리일'] || '').localeCompare(b['처리일'] || ''))
-          .forEach(row => {
-            userLastTotal.set(row['고객ID'], Number(row['토탈포인트']) || 0);
-          });
-        return Array.from(userLastTotal.values()).reduce((sum, v) => sum + v, 0);
+        const userLast = new Map();
+        prevData.sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||'')).forEach(r => userLast.set(r['고객ID'], Number(r['토탈포인트'])||0));
+        return Array.from(userLast.values()).reduce((s,v) => s+v, 0);
       }, [validData, selectedMonth]);
 
       const monthlyTotals = useMemo(() => {
-        let totalUsed = 0;
-        let totalEarned = 0;
-        monthlyData.forEach(row => {
-          const point = Number(row['포인트']) || 0;
-          if (row['타입'] === '사용') {
-            totalUsed += point;
-          } else {
-            totalEarned += point;
-          }
-        });
-        return {
-          used: totalUsed,
-          earned: totalEarned,
-          carryover: carryoverPoint,
-          balance: carryoverPoint + totalEarned + totalUsed
-        };
+        let used=0, earned=0;
+        monthlyData.forEach(r => { const p = Number(r['포인트'])||0; if(r['타입']==='사용') used+=p; else earned+=p; });
+        return { used, earned, carryover: carryoverPoint, balance: carryoverPoint + earned + used };
       }, [monthlyData, carryoverPoint]);
 
       const earnByType = useMemo(() => {
@@ -142,428 +88,155 @@
           const point = Number(row['포인트']) || 0;
           const userId = row['고객ID'];
           const date = (row['처리일'] || '').substring(0, 10);
-          
-          if (!map.has(memo)) {
-            map.set(memo, { memo, totalPoint: 0, users: new Set(), dates: new Map() });
-          }
+          if (!map.has(memo)) map.set(memo, { memo, totalPoint: 0, users: new Set(), dates: new Map() });
           const item = map.get(memo);
           item.totalPoint += point;
           item.users.add(userId);
-          
-          if (!item.dates.has(date)) {
-            item.dates.set(date, { point: 0, count: 0 });
-          }
+          if (!item.dates.has(date)) item.dates.set(date, { point: 0, count: 0 });
           item.dates.get(date).point += point;
           item.dates.get(date).count += 1;
         });
-        
-        return Array.from(map.values())
-          .map(item => ({
-            memo: item.memo,
-            totalPoint: item.totalPoint,
-            userCount: item.users.size,
-            dateList: Array.from(item.dates.entries())
-              .map(([date, d]) => ({ date, point: d.point, count: d.count }))
-              .sort((a, b) => a.date.localeCompare(b.date))
-          }))
-          .sort((a, b) => b.totalPoint - a.totalPoint);
+        return Array.from(map.values()).map(item => ({
+          memo: item.memo, totalPoint: item.totalPoint, userCount: item.users.size,
+          dateList: Array.from(item.dates.entries()).map(([d, v]) => ({ date: d, point: v.point, count: v.count })).sort((a,b) => a.date.localeCompare(b.date))
+        })).sort((a,b) => b.totalPoint - a.totalPoint);
       }, [earnData]);
 
       const companyStats = useMemo(() => {
         const map = new Map();
         useData.forEach(row => {
-          const company = row['업체명'] || '(없음)';
+          const company = row['업체명'] || 'CS 수동차감';
           const point = Number(row['포인트']) || 0;
           const userId = row['고객ID'];
-          
-          if (!map.has(company)) {
-            map.set(company, { company, usedPoint: 0, users: new Set() });
-          }
-          const c = map.get(company);
-          c.usedPoint += point;
-          c.users.add(userId);
+          if (!map.has(company)) map.set(company, { company, usedPoint: 0, users: new Set() });
+          map.get(company).usedPoint += point;
+          map.get(company).users.add(userId);
         });
-        return Array.from(map.values())
-          .map(c => ({ company: c.company, usedPoint: c.usedPoint, userCount: c.users.size }))
-          .sort((a, b) => a.usedPoint - b.usedPoint);
+        return Array.from(map.values()).map(c => ({ company: c.company, usedPoint: c.usedPoint, userCount: c.users.size })).sort((a,b) => a.usedPoint - b.usedPoint);
       }, [useData]);
 
       const productStats = useMemo(() => {
         const map = new Map();
         useData.forEach(row => {
-          const memo = row['사용자메모'] || '';
+          const productCode = row['상품코드'] || '';
+          const company = row['업체명'] || 'CS 수동차감';
+          const memo = row['사용자메모'] || row['관리자메모'] || '';
           const match = memo.match(/상품명\(([^)]+)\)/);
-          const product = match ? match[1] : '(알수없음)';
+          const productName = match ? match[1] : (memo || '-');
           const point = Number(row['포인트']) || 0;
           const userId = row['고객ID'];
-          
-          if (!map.has(product)) {
-            map.set(product, { product, usedPoint: 0, users: new Set() });
-          }
-          const p = map.get(product);
-          p.usedPoint += point;
-          p.users.add(userId);
+          const key = productCode || memo || 'unknown';
+          if (!map.has(key)) map.set(key, { productCode: productCode || '-', company, productName, usedPoint: 0, users: new Set() });
+          map.get(key).usedPoint += point;
+          map.get(key).users.add(userId);
         });
-        return Array.from(map.values())
-          .map(p => ({ product: p.product, usedPoint: p.usedPoint, userCount: p.users.size }))
-          .sort((a, b) => a.usedPoint - b.usedPoint);
+        return Array.from(map.values()).map(p => ({ productCode: p.productCode, company: p.company, productName: p.productName, usedPoint: p.usedPoint, userCount: p.users.size })).sort((a,b) => a.usedPoint - b.usedPoint);
       }, [useData]);
 
       const userStats = useMemo(() => {
         const map = new Map();
-        
-        const sortedMonthlyData = [...monthlyData].sort((a, b) => 
-          (a['처리일'] || '').localeCompare(b['처리일'] || '')
-        );
-        
-        sortedMonthlyData.forEach(row => {
-          const id = row['고객ID'];
-          const name = row['고객명'];
-          const point = Number(row['포인트']) || 0;
-          const total = Number(row['토탈포인트']) || 0;
-          const type = row['타입'];
-          const date = row['처리일'] || '';
-          
-          if (!map.has(id)) {
-            map.set(id, { 
-              id, name, 
-              startPoint: 0,
-              earnedPoint: 0,
-              usedPoint: 0,
-              currentPoint: 0,
-              calculatedPoint: 0,
-              mismatch: false,
-              transactions: [],
-              lastDate: '',
-              lastOrderNo: ''
-            });
-          }
-          const user = map.get(id);
-          user.name = name;
-          
-          if (type === '사용') {
-            user.usedPoint += point;
-          } else {
-            user.earnedPoint += point;
-          }
-          
+        const sorted = [...monthlyData].sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+        sorted.forEach(row => {
+          const id = row['고객ID'], name = row['고객명'], point = Number(row['포인트'])||0, total = Number(row['토탈포인트'])||0, type = row['타입'], date = row['처리일']||'';
+          if (!map.has(id)) map.set(id, { id, name, startPoint:0, earnedPoint:0, usedPoint:0, currentPoint:0, calculatedPoint:0, mismatch:false, transactions:[], lastDate:'', lastOrderNo:'' });
+          const u = map.get(id);
+          u.name = name;
+          if (type === '사용') u.usedPoint += point; else u.earnedPoint += point;
           const orderNo = row['주문번호'] || '';
-          if (date > user.lastDate) {
-            user.currentPoint = total;
-            user.lastDate = date;
-            user.lastOrderNo = orderNo;
-          } else if (date === user.lastDate) {
-            if (total < user.currentPoint) {
-              user.currentPoint = total;
-            }
-          }
-          
-          user.transactions.push({ 
-            date, type, point, total, 
-            memo: row['사용자메모'] || row['관리자메모'] || '',
-            status: row['주문상태'] || ''
-          });
+          if (date > u.lastDate) { u.currentPoint = total; u.lastDate = date; u.lastOrderNo = orderNo; }
+          else if (date === u.lastDate && total < u.currentPoint) u.currentPoint = total;
+          u.transactions.push({ date, type, point, total, memo: row['사용자메모'] || row['관리자메모'] || '', status: row['주문상태'] || '' });
         });
-        
         if (selectedMonth) {
-          const prevData = validData
-            .filter(row => {
-              const date = row['처리일'] || '';
-              const rowMonth = date.substring(0, 7).replace('/', '-');
-              return rowMonth < selectedMonth;
-            })
-            .sort((a, b) => (a['처리일'] || '').localeCompare(b['처리일'] || ''));
-          
-          const prevUserTotal = new Map();
-          prevData.forEach(row => {
-            prevUserTotal.set(row['고객ID'], Number(row['토탈포인트']) || 0);
-          });
-          
-          map.forEach((user, id) => {
-            if (prevUserTotal.has(id)) {
-              user.startPoint = prevUserTotal.get(id);
-            } else if (user.transactions.length > 0) {
-              const sortedTx = [...user.transactions].sort((a, b) => a.date.localeCompare(b.date));
-              const firstTx = sortedTx[0];
-              user.startPoint = firstTx.total - firstTx.point;
-            }
-            
-            user.calculatedPoint = user.startPoint + user.earnedPoint + user.usedPoint;
-            user.mismatch = Math.abs(user.calculatedPoint - user.currentPoint) > 1;
+          const prevData = validData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+          const prevUser = new Map();
+          prevData.forEach(r => prevUser.set(r['고객ID'], Number(r['토탈포인트'])||0));
+          map.forEach((u, id) => {
+            if (prevUser.has(id)) u.startPoint = prevUser.get(id);
+            else if (u.transactions.length > 0) { const first = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date))[0]; u.startPoint = first.total - first.point; }
+            u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint;
+            u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
         }
-        
-        return Array.from(map.values())
-          .filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0)
-          .sort((a, b) => a.usedPoint - b.usedPoint);
+        return Array.from(map.values()).filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0).sort((a,b) => a.usedPoint - b.usedPoint);
       }, [monthlyData, validData, selectedMonth]);
 
       const mismatchCount = useMemo(() => userStats.filter(u => u.mismatch).length, [userStats]);
-
-      const filteredEarnByType = useMemo(() => {
-        if (!searchTerm) return earnByType;
-        const lower = searchTerm.toLowerCase();
-        return earnByType.filter(e => e.memo.toLowerCase().includes(lower));
-      }, [earnByType, searchTerm]);
-
-      const filteredCompanyStats = useMemo(() => {
-        if (!searchTerm) return companyStats;
-        const lower = searchTerm.toLowerCase();
-        return companyStats.filter(c => c.company.toLowerCase().includes(lower));
-      }, [companyStats, searchTerm]);
-
-      const filteredProductStats = useMemo(() => {
-        if (!searchTerm) return productStats;
-        const lower = searchTerm.toLowerCase();
-        return productStats.filter(p => p.product.toLowerCase().includes(lower));
-      }, [productStats, searchTerm]);
-
-      const filteredUserStats = useMemo(() => {
-        if (!searchTerm) return userStats;
-        const lower = searchTerm.toLowerCase();
-        return userStats.filter(u => (u.name || '').toLowerCase().includes(lower) || (u.id || '').toLowerCase().includes(lower));
-      }, [userStats, searchTerm]);
+      const filteredEarnByType = useMemo(() => !searchTerm ? earnByType : earnByType.filter(e => e.memo.toLowerCase().includes(searchTerm.toLowerCase())), [earnByType, searchTerm]);
+      const filteredCompanyStats = useMemo(() => !searchTerm ? companyStats : companyStats.filter(c => c.company.toLowerCase().includes(searchTerm.toLowerCase())), [companyStats, searchTerm]);
+      const filteredProductStats = useMemo(() => !searchTerm ? productStats : productStats.filter(p => p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) || p.company.toLowerCase().includes(searchTerm.toLowerCase()) || p.productName.toLowerCase().includes(searchTerm.toLowerCase())), [productStats, searchTerm]);
+      const filteredUserStats = useMemo(() => { let r = showMismatchOnly ? userStats.filter(u => u.mismatch) : userStats; if(!searchTerm) return r; const l = searchTerm.toLowerCase(); return r.filter(u => (u.name||'').toLowerCase().includes(l) || (u.id||'').toLowerCase().includes(l)); }, [userStats, searchTerm, showMismatchOnly]);
 
       const handleDownload = () => {
-        let downloadData = [];
-        let sheetName = '';
+        let downloadData = [], sheetName = '';
         const monthLabel = selectedMonth || '전체';
-        
-        if (mainTab === 'earn') {
-          downloadData = filteredEarnByType.map(e => ({
-            '적립유형(관리자메모)': e.memo,
-            '총적립포인트': e.totalPoint,
-            '적립인원': e.userCount
-          }));
-          sheetName = '적립내역';
-        } else if (useSubTab === 'company') {
-          downloadData = filteredCompanyStats.map(c => ({
-            '업체명': c.company,
-            '사용포인트': c.usedPoint,
-            '사용인원': c.userCount
-          }));
-          sheetName = '업체별';
-        } else if (useSubTab === 'product') {
-          downloadData = filteredProductStats.map(p => ({
-            '상품명': p.product,
-            '사용포인트': p.usedPoint,
-            '사용인원': p.userCount
-          }));
-          sheetName = '상품별';
-        } else {
-          downloadData = filteredUserStats.map(u => ({
-            '고객ID': u.id,
-            '고객명': u.name,
-            '시작포인트': u.startPoint,
-            '적립포인트': u.earnedPoint,
-            '사용포인트': u.usedPoint,
-            '계산잔여': u.calculatedPoint,
-            '실제잔여': u.currentPoint,
-            '불일치': u.mismatch ? 'O' : ''
-          }));
-          sheetName = '사용자별';
-        }
-        
+        if (mainTab === 'earn') { downloadData = filteredEarnByType.map(e => ({ '적립유형': e.memo, '적립포인트': e.totalPoint, '인원': e.userCount })); sheetName = '적립내역'; }
+        else if (useSubTab === 'company') { downloadData = filteredCompanyStats.map(c => ({ '업체명': c.company, '사용포인트': c.usedPoint, '인원': c.userCount })); sheetName = '업체별'; }
+        else if (useSubTab === 'product') { downloadData = filteredProductStats.map(p => ({ '상품코드': p.productCode, '입점사': p.company, '상품명': p.productName, '사용포인트': p.usedPoint, '인원': p.userCount })); sheetName = '상품별'; }
+        else { downloadData = filteredUserStats.map(u => ({ '고객ID': u.id, '고객명': u.name, '시작': u.startPoint, '적립': u.earnedPoint, '사용': u.usedPoint, '계산잔여': u.calculatedPoint, '실제잔여': u.currentPoint, '불일치': u.mismatch ? 'O' : '' })); sheetName = '사용자별'; }
         const ws = XLSX.utils.json_to_sheet(downloadData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        XLSX.writeFile(wb, monthLabel + '_' + sheetName + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+        XLSX.writeFile(wb, monthLabel + '_' + sheetName + '.xlsx');
       };
 
-      const getMonthLabel = () => {
-        if (!selectedMonth) return '';
-        const parts = selectedMonth.split('-');
-        return parts[0] + '년 ' + parseInt(parts[1]) + '월';
-      };
+      const getMonthLabel = () => { if(!selectedMonth) return ''; const p = selectedMonth.split('-'); return p[0] + '년 ' + parseInt(p[1]) + '월'; };
 
-      const mainTabStyle = (tab) => ({
-        padding: '14px 28px',
-        border: 'none',
-        backgroundColor: mainTab === tab ? (tab === 'earn' ? '#16a34a' : '#dc2626') : '#e5e7eb',
-        color: mainTab === tab ? 'white' : '#666',
-        cursor: 'pointer',
-        fontWeight: 'bold',
-        fontSize: '15px',
-        borderRadius: tab === 'earn' ? '8px 0 0 8px' : '0 8px 8px 0'
-      });
-
-      const subTabStyle = (tab) => ({
-        padding: '10px 20px',
-        border: 'none',
-        borderBottom: useSubTab === tab ? '3px solid #dc2626' : '3px solid transparent',
-        backgroundColor: 'transparent',
-        cursor: 'pointer',
-        fontWeight: useSubTab === tab ? 'bold' : 'normal',
-        color: useSubTab === tab ? '#dc2626' : '#666'
-      });
-
-      const thStyle = { padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb', whiteSpace: 'nowrap' };
-      const tdStyle = { padding: '12px', borderBottom: '1px solid #e5e7eb' };
-      const cardStyle = {
-        backgroundColor: 'white',
-        borderRadius: '12px',
-        padding: '20px',
-        textAlign: 'center',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        flex: 1,
-        minWidth: '140px'
-      };
+      const colors = { primary: '#1e3a5f', success: '#0d7c66', danger: '#c62828', muted: '#64748b', light: '#f1f5f9', border: '#e2e8f0' };
+      const mainTabStyle = (tab) => ({ padding: '8px 20px', border: '1px solid ' + colors.border, backgroundColor: mainTab === tab ? (tab === 'earn' ? colors.success : colors.danger) : '#fff', color: mainTab === tab ? 'white' : colors.muted, cursor: 'pointer', fontWeight: '600', fontSize: '13px', borderRadius: tab === 'earn' ? '4px 0 0 4px' : '0 4px 4px 0' });
+      const subTabStyle = (tab) => ({ padding: '8px 16px', border: 'none', borderBottom: useSubTab === tab ? '2px solid ' + colors.danger : '2px solid transparent', backgroundColor: 'transparent', cursor: 'pointer', fontWeight: useSubTab === tab ? '600' : '400', fontSize: '13px', color: useSubTab === tab ? colors.danger : colors.muted });
+      const thStyle = { padding: '10px 12px', textAlign: 'left', borderBottom: '1px solid ' + colors.border, backgroundColor: colors.light, fontSize: '12px', fontWeight: '600', color: colors.muted };
+      const tdStyle = { padding: '10px 12px', borderBottom: '1px solid ' + colors.border, fontSize: '13px' };
+      const cardStyle = { backgroundColor: 'white', borderRadius: '4px', padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', flex: 1, minWidth: '100px', borderLeft: '3px solid' };
+      const inputStyle = { padding: '8px 12px', border: '1px solid ' + colors.border, borderRadius: '4px', fontSize: '13px', outline: 'none' };
+      const btnStyle = { padding: '8px 16px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '500' };
 
       return (
-        <div style={{ padding: '16px', backgroundColor: '#f5f5f5', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>📊 {getMonthLabel()} 포인트</h1>
-          
-          <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '16px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <label style={{ backgroundColor: '#2563eb', color: 'white', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer' }}>
-                📁 엑셀 업로드
-                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} style={{ display: 'none' }} />
-              </label>
-              
-              {availableMonths.length > 0 && (
-                <select 
-                  value={selectedMonth} 
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                >
-                  <option value="">전체 기간</option>
-                  {availableMonths.map(m => (
-                    <option key={m} value={m}>{m.replace('-', '년 ')}월</option>
-                  ))}
-                </select>
-              )}
-              
-              {fileName && <span style={{ color: '#666', fontSize: '14px' }}>{fileName}</span>}
+        <div style={{ padding: '16px 20px', backgroundColor: '#f8f9fa', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h1 style={{ fontSize: '18px', fontWeight: '600', color: colors.primary, margin: 0 }}>{getMonthLabel()} 포인트 현황</h1>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {availableMonths.length > 0 && (<select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={{ ...inputStyle, minWidth: '120px' }}><option value="">전체 기간</option>{availableMonths.map(m => (<option key={m} value={m}>{m.replace('-', '년 ')}월</option>))}</select>)}
+              <label style={{ ...btnStyle, backgroundColor: colors.primary, color: 'white' }}>파일 선택<input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} style={{ display: 'none' }} /></label>
             </div>
-            
-            {data.length > 0 && (
-              <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={showCanceled} 
-                    onChange={(e) => setShowCanceled(e.target.checked)}
-                    style={{ width: '18px', height: '18px' }}
-                  />
-                  <span style={{ fontSize: '14px' }}>취소완료 포함</span>
-                </label>
-                <span style={{ fontSize: '13px', color: '#666' }}>
-                  (취소완료 {canceledCount}건 {showCanceled ? '포함됨' : '제외됨'})
-                </span>
-              </div>
-            )}
           </div>
+
+          {data.length > 0 && (<div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px', fontSize: '12px', color: colors.muted }}><span>{fileName}</span><label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}><input type="checkbox" checked={showCanceled} onChange={(e) => setShowCanceled(e.target.checked)} />취소완료 포함 ({canceledCount}건)</label></div>)}
 
           {data.length > 0 && (
             <Fragment>
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                <div style={{ ...cardStyle, borderTop: '4px solid #8b5cf6' }}>
-                  <div style={{ color: '#666', fontSize: '13px', marginBottom: '6px' }}>📦 전월 이월</div>
-                  <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#8b5cf6' }}>
-                    {monthlyTotals.carryover.toLocaleString()}
-                  </div>
-                </div>
-                <div style={{ ...cardStyle, borderTop: '4px solid #16a34a' }}>
-                  <div style={{ color: '#666', fontSize: '13px', marginBottom: '6px' }}>➕ 적립 ({earnData.length}건)</div>
-                  <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#16a34a' }}>
-                    +{monthlyTotals.earned.toLocaleString()}
-                  </div>
-                </div>
-                <div style={{ ...cardStyle, borderTop: '4px solid #dc2626' }}>
-                  <div style={{ color: '#666', fontSize: '13px', marginBottom: '6px' }}>➖ 사용 ({useData.length}건)</div>
-                  <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#dc2626' }}>
-                    {monthlyTotals.used.toLocaleString()}
-                  </div>
-                </div>
-                <div style={{ ...cardStyle, borderTop: '4px solid #2563eb', backgroundColor: '#eff6ff' }}>
-                  <div style={{ color: '#666', fontSize: '13px', marginBottom: '6px' }}>💰 잔여 포인트</div>
-                  <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#2563eb' }}>
-                    {monthlyTotals.balance.toLocaleString()}
-                  </div>
-                </div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ ...cardStyle, borderLeftColor: colors.muted }}><div style={{ fontSize: '11px', color: colors.muted }}>전월이월</div><div style={{ fontSize: '15px', fontWeight: '600', color: '#374151' }}>{monthlyTotals.carryover.toLocaleString()}</div></div>
+                <div style={{ ...cardStyle, borderLeftColor: colors.success }}><div style={{ fontSize: '11px', color: colors.muted }}>적립 ({earnData.length})</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.success }}>+{monthlyTotals.earned.toLocaleString()}</div></div>
+                <div style={{ ...cardStyle, borderLeftColor: colors.danger }}><div style={{ fontSize: '11px', color: colors.muted }}>사용 ({useData.length})</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.danger }}>{monthlyTotals.used.toLocaleString()}</div></div>
+                <div style={{ ...cardStyle, borderLeftColor: colors.primary, backgroundColor: '#f0f4f8' }}><div style={{ fontSize: '11px', color: colors.muted }}>잔여</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.primary }}>{monthlyTotals.balance.toLocaleString()}</div></div>
               </div>
 
-              <div style={{ marginBottom: '16px', display: 'flex' }}>
-                <button style={mainTabStyle('earn')} onClick={() => { setMainTab('earn'); setSearchTerm(''); }}>
-                  ➕ 적립내역
-                </button>
-                <button style={mainTabStyle('use')} onClick={() => { setMainTab('use'); setSearchTerm(''); }}>
-                  ➖ 사용내역
-                </button>
+              <div style={{ marginBottom: '12px' }}>
+                <button style={mainTabStyle('earn')} onClick={() => { setMainTab('earn'); setSearchTerm(''); }}>+ 적립내역</button>
+                <button style={mainTabStyle('use')} onClick={() => { setMainTab('use'); setSearchTerm(''); }}>- 사용내역</button>
               </div>
 
               {mainTab === 'earn' && (
-                <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-                  <div style={{ padding: '12px', display: 'flex', gap: '12px', borderBottom: '1px solid #e5e7eb' }}>
-                    <input
-                      type="text"
-                      placeholder="적립유형 검색..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                    />
-                    <button onClick={handleDownload} style={{ backgroundColor: '#16a34a', color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>
-                      📥 다운로드
-                    </button>
+                <div style={{ backgroundColor: 'white', borderRadius: '6px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 12px', display: 'flex', gap: '8px', borderBottom: '1px solid ' + colors.border, alignItems: 'center' }}>
+                    <input type="text" placeholder="적립유형 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                    <button onClick={handleDownload} style={{ ...btnStyle, backgroundColor: colors.success, color: 'white' }}>다운로드</button>
                   </div>
-                  
-                  <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderBottom: '1px solid #e5e7eb' }}>
-                    <strong>적립유형 {filteredEarnByType.length}개 / 총 {earnData.length}건 / {new Set(earnData.map(e => e['고객ID'])).size}명</strong>
-                  </div>
-                  
-                  <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                      <thead style={{ position: 'sticky', top: 0 }}>
-                        <tr>
-                          <th style={{ ...thStyle, width: '40px' }}></th>
-                          <th style={thStyle}>적립유형 (관리자메모)</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>총 적립포인트</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>적립인원</th>
-                        </tr>
-                      </thead>
+                  <div style={{ padding: '8px 12px', backgroundColor: colors.light, borderBottom: '1px solid ' + colors.border, fontSize: '12px', color: colors.muted }}>{filteredEarnByType.length}개 유형 / {earnData.length}건 / {new Set(earnData.map(e => e['고객ID'])).size}명</div>
+                  <div style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead style={{ position: 'sticky', top: 0 }}><tr><th style={{ ...thStyle, width: '30px' }}></th><th style={thStyle}>적립유형</th><th style={{ ...thStyle, textAlign: 'right', width: '120px' }}>적립포인트</th><th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>인원</th></tr></thead>
                       <tbody>
                         {filteredEarnByType.map((e, i) => (
                           <Fragment key={i}>
-                            <tr 
-                              style={{ cursor: 'pointer', backgroundColor: expandedEarn === i ? '#f0fdf4' : 'transparent' }}
-                              onClick={() => setExpandedEarn(expandedEarn === i ? null : i)}
-                            >
+                            <tr style={{ cursor: 'pointer', backgroundColor: expandedEarn === i ? colors.light : 'transparent' }} onClick={() => setExpandedEarn(expandedEarn === i ? null : i)}>
                               <td style={tdStyle}>{expandedEarn === i ? '▼' : '▶'}</td>
-                              <td style={{ ...tdStyle, maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={e.memo}>
-                                {e.memo}
-                              </td>
-                              <td style={{ ...tdStyle, textAlign: 'right', color: '#16a34a', fontWeight: 'bold' }}>
-                                +{e.totalPoint.toLocaleString()}
-                              </td>
-                              <td style={{ ...tdStyle, textAlign: 'right' }}>{e.userCount}명</td>
+                              <td style={{ ...tdStyle, maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={e.memo}>{e.memo}</td>
+                              <td style={{ ...tdStyle, textAlign: 'right', color: colors.success, fontWeight: '600' }}>+{e.totalPoint.toLocaleString()}</td>
+                              <td style={{ ...tdStyle, textAlign: 'right' }}>{e.userCount}</td>
                             </tr>
-                            {expandedEarn === i && (
-                              <tr>
-                                <td colSpan={4} style={{ padding: '0', backgroundColor: '#f9fafb' }}>
-                                  <div style={{ padding: '12px 20px' }}>
-                                    <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#666' }}>📅 일자별 상세</div>
-                                    <table style={{ width: '100%', fontSize: '13px' }}>
-                                      <thead>
-                                        <tr style={{ backgroundColor: '#e5e7eb' }}>
-                                          <th style={{ padding: '8px', textAlign: 'left' }}>일자</th>
-                                          <th style={{ padding: '8px', textAlign: 'right' }}>적립포인트</th>
-                                          <th style={{ padding: '8px', textAlign: 'right' }}>건수</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {e.dateList.map((d, j) => (
-                                          <tr key={j}>
-                                            <td style={{ padding: '8px' }}>{d.date}</td>
-                                            <td style={{ padding: '8px', textAlign: 'right', color: '#16a34a' }}>+{d.point.toLocaleString()}</td>
-                                            <td style={{ padding: '8px', textAlign: 'right' }}>{d.count}건</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
+                            {expandedEarn === i && (<tr><td colSpan={4} style={{ padding: '0', backgroundColor: colors.light }}><div style={{ padding: '10px 16px' }}><table style={{ width: '100%', fontSize: '12px' }}><thead><tr><th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid ' + colors.border }}>일자</th><th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid ' + colors.border }}>포인트</th><th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid ' + colors.border }}>건수</th></tr></thead><tbody>{e.dateList.map((d, j) => (<tr key={j}><td style={{ padding: '6px 8px' }}>{d.date}</td><td style={{ padding: '6px 8px', textAlign: 'right', color: colors.success }}>+{d.point.toLocaleString()}</td><td style={{ padding: '6px 8px', textAlign: 'right' }}>{d.count}</td></tr>))}</tbody></table></div></td></tr>)}
                           </Fragment>
                         ))}
                       </tbody>
@@ -573,201 +246,29 @@
               )}
 
               {mainTab === 'use' && (
-                <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
-                    <button style={subTabStyle('company')} onClick={() => { setUseSubTab('company'); setSearchTerm(''); }}>🏢 업체별</button>
-                    <button style={subTabStyle('product')} onClick={() => { setUseSubTab('product'); setSearchTerm(''); }}>📦 상품별</button>
-                    <button style={subTabStyle('user')} onClick={() => { setUseSubTab('user'); setSearchTerm(''); }}>
-                      👤 사용자별 {mismatchCount > 0 && <span style={{ color: '#dc2626', marginLeft: '4px' }}>⚠️{mismatchCount}</span>}
-                    </button>
+                <div style={{ backgroundColor: 'white', borderRadius: '6px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', borderBottom: '1px solid ' + colors.border }}>
+                    <button style={subTabStyle('company')} onClick={() => { setUseSubTab('company'); setSearchTerm(''); }}>업체별</button>
+                    <button style={subTabStyle('product')} onClick={() => { setUseSubTab('product'); setSearchTerm(''); }}>상품별</button>
+                    <button style={subTabStyle('user')} onClick={() => { setUseSubTab('user'); setSearchTerm(''); }}>사용자별 {mismatchCount > 0 && <span style={{ color: colors.danger, marginLeft: '4px' }}>({mismatchCount})</span>}</button>
+                  </div>
+                  <div style={{ padding: '10px 12px', display: 'flex', gap: '8px', borderBottom: '1px solid ' + colors.border, alignItems: 'center' }}>
+                    <input type="text" placeholder={useSubTab === 'company' ? '업체명 검색...' : useSubTab === 'product' ? '상품코드/입점사/상품명 검색...' : '이름/ID 검색...'} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                    {useSubTab === 'user' && mismatchCount > 0 && (<label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}><input type="checkbox" checked={showMismatchOnly} onChange={(e) => setShowMismatchOnly(e.target.checked)} />불일치만</label>)}
+                    <button onClick={handleDownload} style={{ ...btnStyle, backgroundColor: colors.danger, color: 'white' }}>다운로드</button>
                   </div>
 
-                  <div style={{ padding: '12px', display: 'flex', gap: '12px', borderBottom: '1px solid #e5e7eb' }}>
-                    <input
-                      type="text"
-                      placeholder={useSubTab === 'company' ? '업체명 검색...' : useSubTab === 'product' ? '상품명 검색...' : '이름 검색...'}
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                    />
-                    <button onClick={handleDownload} style={{ backgroundColor: '#dc2626', color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>
-                      📥 다운로드
-                    </button>
-                  </div>
+                  {useSubTab === 'company' && (<Fragment><div style={{ padding: '8px 12px', backgroundColor: colors.light, borderBottom: '1px solid ' + colors.border, fontSize: '12px', color: colors.muted }}>{filteredCompanyStats.length}개 업체</div><div style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead style={{ position: 'sticky', top: 0 }}><tr><th style={thStyle}>업체명</th><th style={{ ...thStyle, textAlign: 'right', width: '120px' }}>사용포인트</th><th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>인원</th></tr></thead><tbody>{filteredCompanyStats.map((c, i) => (<tr key={i}><td style={{ ...tdStyle, color: c.company === 'CS 수동차감' ? colors.muted : 'inherit', fontStyle: c.company === 'CS 수동차감' ? 'italic' : 'normal' }}>{c.company}</td><td style={{ ...tdStyle, textAlign: 'right', color: colors.danger, fontWeight: '600' }}>{c.usedPoint.toLocaleString()}</td><td style={{ ...tdStyle, textAlign: 'right' }}>{c.userCount}</td></tr>))}</tbody></table></div></Fragment>)}
 
-                  {useSubTab === 'company' && (
-                    <Fragment>
-                      <div style={{ padding: '12px', backgroundColor: '#fef2f2', borderBottom: '1px solid #e5e7eb' }}>
-                        <strong>총 {filteredCompanyStats.length}개 업체</strong>
-                      </div>
-                      <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                          <thead style={{ position: 'sticky', top: 0 }}>
-                            <tr>
-                              <th style={thStyle}>업체명</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>사용 포인트</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>사용 인원</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredCompanyStats.map((c, i) => (
-                              <tr key={i}>
-                                <td style={tdStyle}>{c.company}</td>
-                                <td style={{ ...tdStyle, textAlign: 'right', color: '#dc2626', fontWeight: 'bold' }}>{c.usedPoint.toLocaleString()}</td>
-                                <td style={{ ...tdStyle, textAlign: 'right' }}>{c.userCount}명</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Fragment>
-                  )}
+                  {useSubTab === 'product' && (<Fragment><div style={{ padding: '8px 12px', backgroundColor: colors.light, borderBottom: '1px solid ' + colors.border, fontSize: '12px', color: colors.muted }}>{filteredProductStats.length}개 상품</div><div style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead style={{ position: 'sticky', top: 0 }}><tr><th style={{ ...thStyle, width: '100px' }}>상품코드</th><th style={{ ...thStyle, width: '120px' }}>입점사</th><th style={thStyle}>상품명</th><th style={{ ...thStyle, textAlign: 'right', width: '110px' }}>사용포인트</th><th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>인원</th></tr></thead><tbody>{filteredProductStats.map((p, i) => (<tr key={i}><td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '11px', color: colors.muted }}>{p.productCode}</td><td style={{ ...tdStyle, fontSize: '12px', color: p.company === 'CS 수동차감' ? colors.muted : 'inherit', fontStyle: p.company === 'CS 수동차감' ? 'italic' : 'normal' }}>{p.company}</td><td style={{ ...tdStyle, maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.productName}>{p.productName}</td><td style={{ ...tdStyle, textAlign: 'right', color: colors.danger, fontWeight: '600' }}>{p.usedPoint.toLocaleString()}</td><td style={{ ...tdStyle, textAlign: 'right' }}>{p.userCount}</td></tr>))}</tbody></table></div></Fragment>)}
 
-                  {useSubTab === 'product' && (
-                    <Fragment>
-                      <div style={{ padding: '12px', backgroundColor: '#fef2f2', borderBottom: '1px solid #e5e7eb' }}>
-                        <strong>총 {filteredProductStats.length}개 상품</strong>
-                      </div>
-                      <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                          <thead style={{ position: 'sticky', top: 0 }}>
-                            <tr>
-                              <th style={thStyle}>상품명</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>사용 포인트</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>사용 인원</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredProductStats.map((p, i) => (
-                              <tr key={i}>
-                                <td style={{ ...tdStyle, maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.product}>{p.product}</td>
-                                <td style={{ ...tdStyle, textAlign: 'right', color: '#dc2626', fontWeight: 'bold' }}>{p.usedPoint.toLocaleString()}</td>
-                                <td style={{ ...tdStyle, textAlign: 'right' }}>{p.userCount}명</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Fragment>
-                  )}
-
-                  {useSubTab === 'user' && (
-                    <Fragment>
-                      <div style={{ padding: '12px', backgroundColor: '#fef2f2', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong>총 {filteredUserStats.length}명</strong>
-                        {mismatchCount > 0 && (
-                          <span style={{ color: '#dc2626', fontSize: '13px' }}>⚠️ 계산 불일치 {mismatchCount}명</span>
-                        )}
-                      </div>
-                      <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                          <thead style={{ position: 'sticky', top: 0 }}>
-                            <tr>
-                              <th style={{ ...thStyle, width: '40px' }}></th>
-                              <th style={thStyle}>이름</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>시작</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>적립</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>사용</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>= 잔여</th>
-                              <th style={{ ...thStyle, textAlign: 'center' }}>검증</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredUserStats.map((u, i) => (
-                              <Fragment key={i}>
-                                <tr 
-                                  style={{ 
-                                    cursor: 'pointer', 
-                                    backgroundColor: u.mismatch ? '#fef2f2' : (expandedUser === i ? '#f0f9ff' : 'transparent')
-                                  }}
-                                  onClick={() => setExpandedUser(expandedUser === i ? null : i)}
-                                >
-                                  <td style={tdStyle}>{expandedUser === i ? '▼' : '▶'}</td>
-                                  <td style={{ ...tdStyle, fontWeight: '500' }}>{u.name}</td>
-                                  <td style={{ ...tdStyle, textAlign: 'right', color: '#8b5cf6' }}>{u.startPoint.toLocaleString()}</td>
-                                  <td style={{ ...tdStyle, textAlign: 'right', color: '#16a34a' }}>+{u.earnedPoint.toLocaleString()}</td>
-                                  <td style={{ ...tdStyle, textAlign: 'right', color: '#dc2626', fontWeight: 'bold' }}>{u.usedPoint.toLocaleString()}</td>
-                                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 'bold', color: '#2563eb' }}>{u.currentPoint.toLocaleString()}</td>
-                                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                                    {u.mismatch ? (
-                                      <span style={{ color: '#dc2626' }}>⚠️ {u.calculatedPoint.toLocaleString()}</span>
-                                    ) : (
-                                      <span style={{ color: '#16a34a' }}>✓</span>
-                                    )}
-                                  </td>
-                                </tr>
-                                {expandedUser === i && (
-                                  <tr>
-                                    <td colSpan={7} style={{ padding: '0', backgroundColor: '#f9fafb' }}>
-                                      <div style={{ padding: '12px 20px' }}>
-                                        <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#666' }}>📋 거래 내역</div>
-                                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px', padding: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px' }}>
-                                          시작 <strong>{u.startPoint.toLocaleString()}</strong> + 
-                                          적립 <strong style={{ color: '#16a34a' }}>+{u.earnedPoint.toLocaleString()}</strong> + 
-                                          사용 <strong style={{ color: '#dc2626' }}>{u.usedPoint.toLocaleString()}</strong> = 
-                                          계산 <strong>{u.calculatedPoint.toLocaleString()}</strong> / 
-                                          실제 <strong style={{ color: '#2563eb' }}>{u.currentPoint.toLocaleString()}</strong>
-                                          {u.mismatch && <span style={{ color: '#dc2626', marginLeft: '8px' }}>⚠️ 차이: {(u.currentPoint - u.calculatedPoint).toLocaleString()}</span>}
-                                        </div>
-                                        <table style={{ width: '100%', fontSize: '13px' }}>
-                                          <thead>
-                                            <tr style={{ backgroundColor: '#e5e7eb' }}>
-                                              <th style={{ padding: '8px', textAlign: 'left' }}>일시</th>
-                                              <th style={{ padding: '8px', textAlign: 'left' }}>타입</th>
-                                              <th style={{ padding: '8px', textAlign: 'right' }}>포인트</th>
-                                              <th style={{ padding: '8px', textAlign: 'right' }}>잔액</th>
-                                              <th style={{ padding: '8px', textAlign: 'left' }}>상태</th>
-                                              <th style={{ padding: '8px', textAlign: 'left' }}>메모</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {[...u.transactions].sort((a, b) => a.date.localeCompare(b.date)).map((tx, j) => (
-                                              <tr key={j}>
-                                                <td style={{ padding: '8px' }}>{tx.date}</td>
-                                                <td style={{ padding: '8px' }}>
-                                                  <span style={{ 
-                                                    padding: '2px 6px', borderRadius: '4px', fontSize: '11px',
-                                                    backgroundColor: tx.type === '사용' ? '#fef2f2' : '#f0fdf4',
-                                                    color: tx.type === '사용' ? '#dc2626' : '#16a34a'
-                                                  }}>
-                                                    {tx.type}
-                                                  </span>
-                                                </td>
-                                                <td style={{ padding: '8px', textAlign: 'right', color: tx.point < 0 ? '#dc2626' : '#16a34a', fontWeight: '500' }}>
-                                                  {tx.point > 0 ? '+' : ''}{tx.point.toLocaleString()}
-                                                </td>
-                                                <td style={{ padding: '8px', textAlign: 'right' }}>{tx.total.toLocaleString()}</td>
-                                                <td style={{ padding: '8px', fontSize: '12px' }}>{tx.status || '-'}</td>
-                                                <td style={{ padding: '8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px', color: '#666' }} title={tx.memo}>
-                                                  {tx.memo || '-'}
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
-                              </Fragment>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Fragment>
-                  )}
+                  {useSubTab === 'user' && (<Fragment><div style={{ padding: '8px 12px', backgroundColor: colors.light, borderBottom: '1px solid ' + colors.border, fontSize: '12px', color: colors.muted, display: 'flex', justifyContent: 'space-between' }}><span>{filteredUserStats.length}명</span>{mismatchCount > 0 && !showMismatchOnly && (<span style={{ color: colors.danger }}>불일치 {mismatchCount}명</span>)}</div><div style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead style={{ position: 'sticky', top: 0 }}><tr><th style={{ ...thStyle, width: '30px' }}></th><th style={thStyle}>이름</th><th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>시작</th><th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>적립</th><th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>사용</th><th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>잔여</th><th style={{ ...thStyle, textAlign: 'center', width: '60px' }}>검증</th></tr></thead><tbody>{filteredUserStats.map((u, i) => (<Fragment key={i}><tr style={{ cursor: 'pointer', backgroundColor: u.mismatch ? '#fef2f2' : (expandedUser === i ? colors.light : 'transparent') }} onClick={() => setExpandedUser(expandedUser === i ? null : i)}><td style={tdStyle}>{expandedUser === i ? '▼' : '▶'}</td><td style={{ ...tdStyle, fontWeight: '500' }}>{u.name}</td><td style={{ ...tdStyle, textAlign: 'right', color: colors.muted }}>{u.startPoint.toLocaleString()}</td><td style={{ ...tdStyle, textAlign: 'right', color: colors.success }}>+{u.earnedPoint.toLocaleString()}</td><td style={{ ...tdStyle, textAlign: 'right', color: colors.danger, fontWeight: '600' }}>{u.usedPoint.toLocaleString()}</td><td style={{ ...tdStyle, textAlign: 'right', fontWeight: '600', color: colors.primary }}>{u.currentPoint.toLocaleString()}</td><td style={{ ...tdStyle, textAlign: 'center' }}>{u.mismatch ? <span style={{ color: colors.danger, fontSize: '11px' }}>✗</span> : <span style={{ color: colors.success, fontSize: '11px' }}>✓</span>}</td></tr>{expandedUser === i && (<tr><td colSpan={7} style={{ padding: '0', backgroundColor: colors.light }}><div style={{ padding: '10px 16px' }}><div style={{ fontSize: '11px', color: colors.muted, marginBottom: '8px', padding: '6px 10px', backgroundColor: 'white', borderRadius: '4px', display: 'inline-block' }}>{u.startPoint.toLocaleString()} + {u.earnedPoint.toLocaleString()} + ({u.usedPoint.toLocaleString()}) = {u.calculatedPoint.toLocaleString()}{u.mismatch && <span style={{ color: colors.danger, marginLeft: '8px' }}>≠ 실제 {u.currentPoint.toLocaleString()}</span>}</div><table style={{ width: '100%', fontSize: '12px' }}><thead><tr><th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid ' + colors.border }}>일시</th><th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid ' + colors.border }}>타입</th><th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid ' + colors.border }}>포인트</th><th style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid ' + colors.border }}>잔액</th><th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid ' + colors.border }}>메모</th></tr></thead><tbody>{[...u.transactions].sort((a,b) => a.date.localeCompare(b.date)).map((tx, j) => (<tr key={j}><td style={{ padding: '6px 8px' }}>{tx.date}</td><td style={{ padding: '6px 8px' }}><span style={{ padding: '2px 6px', borderRadius: '3px', fontSize: '10px', backgroundColor: tx.type === '사용' ? '#fef2f2' : '#f0fdf4', color: tx.type === '사용' ? colors.danger : colors.success }}>{tx.type}</span></td><td style={{ padding: '6px 8px', textAlign: 'right', color: tx.point < 0 ? colors.danger : colors.success }}>{tx.point > 0 ? '+' : ''}{tx.point.toLocaleString()}</td><td style={{ padding: '6px 8px', textAlign: 'right' }}>{tx.total.toLocaleString()}</td><td style={{ padding: '6px 8px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: colors.muted }} title={tx.memo}>{tx.memo || '-'}</td></tr>))}</tbody></table></div></td></tr>)}</Fragment>))}</tbody></table></div></Fragment>)}
                 </div>
               )}
             </Fragment>
           )}
 
-          {data.length === 0 && (
-            <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '60px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📄</div>
-              <p style={{ color: '#666', marginBottom: '8px' }}>엑셀 파일을 업로드하세요</p>
-              <p style={{ color: '#999', fontSize: '14px' }}>.xlsx, .xls, .csv 지원</p>
-            </div>
-          )}
+          {data.length === 0 && (<div style={{ backgroundColor: 'white', borderRadius: '6px', padding: '60px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}><div style={{ fontSize: '36px', marginBottom: '12px', opacity: 0.3 }}>📊</div><p style={{ color: colors.muted, margin: 0 }}>엑셀 파일을 업로드하세요</p></div>)}
         </div>
       );
     }
@@ -776,3 +277,4 @@
   </script>
 </body>
 </html>
+
