@@ -69,7 +69,12 @@
       const monthlyAllData = useMemo(() => !selectedMonth ? realData : realData.filter(row => (row['처리일'] || '').startsWith(selectedMonth.replace('-', '/'))), [realData, selectedMonth]);
       
       const availableMonths = useMemo(() => { const m = new Set(); validData.forEach(r => { const d = r['처리일'] || ''; const match = d.match(/(\d{4})\/(\d{2})/); if(match) m.add(match[1]+'-'+match[2]); }); return Array.from(m).sort().reverse(); }, [validData]);
-      const earnData = useMemo(() => monthlyData.filter(r => r['타입'] !== '사용'), [monthlyData]);
+      const earnData = useMemo(() => monthlyData.filter(r => {
+  if (r['타입'] === '사용') return false;
+  const memo = r['관리자메모'] || '';
+  if (memo.includes('취소 포인트') || memo.includes('취소포인트')) return false;
+  return true;
+}), [monthlyData]);
       const useData = useMemo(() => monthlyData.filter(r => r['타입'] === '사용'), [monthlyData]);
 
       const carryoverPoint = useMemo(() => {
@@ -312,4 +317,5 @@
   </script>
 </body>
 </html>
+
 
