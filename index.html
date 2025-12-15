@@ -91,7 +91,7 @@ const monthlyTotals = useMemo(() => {
   monthlyData.forEach(r => { const p = Number(r['포인트'])||0; if(r['타입']==='사용') used+=p; });
   earnData.forEach(r => { earned += Number(r['포인트'])||0; });
         return { used, earned, carryover: carryoverPoint, balance: carryoverPoint + earned + used };
-      }, [monthlyData, earnData, carryoverPoint);
+      }, [monthlyData, earnData, carryoverPoint]);
 
       const earnByType = useMemo(() => {
         const map = new Map();
@@ -318,6 +318,7 @@ const monthlyTotals = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
