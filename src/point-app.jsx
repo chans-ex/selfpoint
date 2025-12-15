@@ -223,7 +223,7 @@ export default function App() {
           calculatedPoint: 0,
           mismatch: false,
           transactions: [],
-          lastDate: ''
+          lastDate: '',
           lastOrderNo: '' //추가 
         });
       }
