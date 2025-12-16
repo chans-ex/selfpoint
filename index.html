@@ -141,7 +141,21 @@
         earnData.forEach(r => { earned += Number(r['포인트'])||0; });
         return { used, earned, carryover: carryoverPoint, balance: carryoverPoint + earned + used };
       }, [useData, earnData, carryoverPoint]);
-
+      const expiringPoint = useMemo(() => {
+        if (!selectedMonth) return 0;
+        const [year, month] = selectedMonth.split('-');
+        const lastDay = new Date(Number(year), Number(month), 0).getDate();
+        const endOfMonth = `${year}/${month}/${lastDay}`;
+        let total = 0;
+        validData.forEach(row => {
+      const expireDate = row['소멸 예정일'] || '';
+    const point = Number(row['포인트']) || 0;
+    if (expireDate && expireDate.substring(0,10) <= endOfMonth.replace(/\//g, '/') && point > 0) {
+      total += point;
+    }
+  });
+  return total;
+}, [validData, selectedMonth]);
       const earnByType = useMemo(() => {
         const map = new Map();
         earnData.forEach(row => {
@@ -298,6 +312,7 @@
             <Fragment>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
                 <div style={{ ...cardStyle, borderLeftColor: colors.muted }}><div style={{ fontSize: '11px', color: colors.muted }}>전월이월</div><div style={{ fontSize: '15px', fontWeight: '600', color: '#374151' }}>{monthlyTotals.carryover.toLocaleString()}</div></div>
+                {expiringPoint > 0 && (<div style={{ ...cardStyle, borderLeftColor: colors.warning, backgroundColor: '#fffbeb' }}><div style={{ fontSize: '11px', color: colors.warning }}>소멸예정</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.warning }}>{expiringPoint.toLocaleString()}</div></div>)}
                 <div style={{ ...cardStyle, borderLeftColor: colors.success }}><div style={{ fontSize: '11px', color: colors.muted }}>적립 ({earnData.length})</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.success }}>+{monthlyTotals.earned.toLocaleString()}</div></div>
                 <div style={{ ...cardStyle, borderLeftColor: colors.danger }}><div style={{ fontSize: '11px', color: colors.muted }}>사용 ({useData.length})</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.danger }}>{monthlyTotals.used.toLocaleString()}</div></div>
                 <div style={{ ...cardStyle, borderLeftColor: colors.primary, backgroundColor: '#f0f4f8' }}><div style={{ fontSize: '11px', color: colors.muted }}>잔여</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.primary }}>{monthlyTotals.balance.toLocaleString()}</div></div>
@@ -368,4 +383,5 @@
   </script>
 </body>
 </html>
+
 
