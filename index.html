@@ -188,52 +188,68 @@
       const productStats = useMemo(() => {
         const map = new Map();
         useData.forEach(row => {
-          const productCode = row['상품코드'] || '-';
-          const company = row['업체명'] || 'CS 수동차감';
-          const productName = row['상품명'] || '-';
-          const key = productCode + '|' + company;
-          const point = Math.abs(Number(row['포인트']) || 0);
+          const productCode = row['상품코드'] || '';
+          const company = row['업체명'] || '';
+          const point = Number(row['포인트']) || 0;
           const userId = row['고객ID'];
-          if (!map.has(key)) map.set(key, { productCode, company, productName, usedPoint: 0, users: new Set() });
+          
+          if (!productCode) {
+            const key = '__CS_MANUAL__';
+            if (!map.has(key)) map.set(key, { productCode: '-', company: 'CS 수동차감', productName: '(수동 차감 합계)', usedPoint: 0, users: new Set() });
+            map.get(key).usedPoint += point;
+            map.get(key).users.add(userId);
+            return;
+          }
+          
+          const memo = row['사용자메모'] || row['관리자메모'] || '';
+          const match = memo.match(/상품명\(([^)]+)\)/);
+          const productName = match ? match[1] : (memo || '-');
+          const key = productCode;
+          if (!map.has(key)) map.set(key, { productCode, company: company || '-', productName, usedPoint: 0, users: new Set() });
           map.get(key).usedPoint += point;
           map.get(key).users.add(userId);
         });
-        return Array.from(map.values()).map(item => ({ productCode: item.productCode, company: item.company, productName: item.productName, usedPoint: item.usedPoint, userCount: item.users.size })).sort((a,b) => b.usedPoint - a.usedPoint);
+        return Array.from(map.values()).map(p => ({ productCode: p.productCode, company: p.company, productName: p.productName, usedPoint: p.usedPoint, userCount: p.users.size })).sort((a,b) => {
+          if (a.productCode === '-') return 1;
+          if (b.productCode === '-') return -1;
+          return a.usedPoint - b.usedPoint;
+        });
       }, [useData]);
 
       const userStats = useMemo(() => {
         const map = new Map();
-        monthlyAllData.forEach(row => {
-          const id = row['고객ID'];
-          const name = row['고객명'];
-          const type = row['타입'];
-          const point = Number(row['포인트']) || 0;
-          const date = row['처리일'] || '';
-          const memo = row['관리자메모'] || '';
+        const sorted = [...monthlyAllData].sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+        sorted.forEach(row => {
+          const id = row['고객ID'], name = row['고객명'], point = Number(row['포인트'])||0, total = Number(row['토탈포인트'])||0, type = row['타입'], date = row['처리일']||'';
           const orderNo = row['주문번호'] || '';
-          const status = row['주문상태'] || '';
-          const total = Number(row['토탈포인트']) || 0;
-          if (!map.has(id)) map.set(id, { id, name, earnedPoint: 0, usedPoint: 0, transactions: [], currentPoint: 0 });
-          const user = map.get(id);
-          if (type === '사용') user.usedPoint += point;
-          else user.earnedPoint += point;
-          user.transactions.push({ date, type, point, memo, orderNo, status, total });
-          user.currentPoint = total;
+          if (!map.has(id)) map.set(id, { id, name, startPoint:0, earnedPoint:0, usedPoint:0, currentPoint:0, calculatedPoint:0, mismatch:false, transactions:[], lastDate:'', lastOrderNo:'' });
+          const u = map.get(id);
+          u.name = name;
+          if (type === '사용') u.usedPoint += point; else u.earnedPoint += point;
+          if (date > u.lastDate) { u.currentPoint = total; u.lastDate = date; u.lastOrderNo = orderNo; }
+          else if (date === u.lastDate && total < u.currentPoint) u.currentPoint = total;
+          u.transactions.push({ date, type, point, total, orderNo: String(orderNo), memo: row['사용자메모'] || row['관리자메모'] || '', status: row['주문상태'] || '' });
         });
-        
-        const prevData = validData.filter(row => { const d = row['처리일'] || ''; return d.substring(0,7).replace('/','-') < selectedMonth; });
-        const userStartPoints = new Map();
-        if (prevData.length > 0) {
-          prevData.sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||'')).forEach(r => userStartPoints.set(r['고객ID'], Number(r['토탈포인트'])||0));
+        if (selectedMonth) {
+          const prevData = realData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+          const prevUser = new Map();
+          prevData.forEach(r => prevUser.set(r['고객ID'], Number(r['토탈포인트'])||0));
+          map.forEach((u, id) => {
+            if (prevUser.has(id)) u.startPoint = prevUser.get(id);
+            else if (u.transactions.length > 0) {
+              const sortedTx = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
+              const firstDate = sortedTx[0].date;
+              const sameDateTx = sortedTx.filter(t => t.date === firstDate);
+              const minTotal = Math.min(...sameDateTx.map(t => t.total));
+              const sumPoints = sameDateTx.reduce((s, t) => s + t.point, 0);
+              u.startPoint = minTotal - sumPoints;
+            }
+            u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint;
+            u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
+          });
         }
-
-        return Array.from(map.values()).map(user => {
-          const startPoint = userStartPoints.get(user.id) || 0;
-          const calculatedPoint = startPoint + user.earnedPoint + user.usedPoint;
-          const mismatch = Math.abs(calculatedPoint - user.currentPoint) > 1;
-          return { ...user, startPoint, calculatedPoint, mismatch };
-        }).sort((a,b) => b.usedPoint - a.usedPoint);
-      }, [monthlyAllData, validData, selectedMonth]);
+        return Array.from(map.values()).filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0).sort((a,b) => a.usedPoint - b.usedPoint);
+      }, [monthlyAllData, realData, selectedMonth]);
 
       const filteredCompanyStats = useMemo(() => {
         if (!searchTerm) return companyStats;
