@@ -326,13 +326,35 @@
 
           {data.length > 0 && (
             <Fragment>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ ...cardStyle, borderLeftColor: colors.muted }} title={tooltips.carryover}><div style={{ fontSize: '11px', color: colors.muted }}>전월이월 ⓘ</div><div style={{ fontSize: '15px', fontWeight: '600', color: '#374151' }}>{monthlyTotals.carryover.toLocaleString()}</div></div>
-                <div style={{ ...cardStyle, borderLeftColor: colors.success }} title={tooltips.earned}><div style={{ fontSize: '11px', color: colors.muted }}>적립 ({earnData.length}) ⓘ</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.success }}>+{monthlyTotals.earned.toLocaleString()}</div></div>
-                <div style={{ ...cardStyle, borderLeftColor: colors.danger }} title={tooltips.used}><div style={{ fontSize: '11px', color: colors.muted }}>사용 ({useData.length}) ⓘ</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.danger }}>{monthlyTotals.used.toLocaleString()}</div></div>
-                <div style={{ ...cardStyle, borderLeftColor: colors.primary, backgroundColor: '#f0f4f8' }} title={tooltips.balance}><div style={{ fontSize: '11px', color: colors.muted }}>잔여 ⓘ</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.primary }}>{monthlyTotals.balance.toLocaleString()}</div></div>
-                <div style={{ ...cardStyle, borderLeftColor: colors.warning, backgroundColor: '#fffbeb' }} title={tooltips.expiring}><div style={{ fontSize: '11px', color: colors.warning }}>소멸예정 ⓘ</div><div style={{ fontSize: '15px', fontWeight: '600', color: colors.warning }}>{expiringPoint.toLocaleString()}</div></div>
-              </div>
+         <div style={{ ...cardStyle, borderLeftColor: colors.muted }}>
+  <div style={{ fontSize: '11px', color: colors.muted }}>전월이월</div>
+  <div style={{ fontSize: '15px', fontWeight: '600', color: '#374151' }}>{monthlyTotals.carryover.toLocaleString()}</div>
+  <div style={{ fontSize: '9px', color: colors.muted, marginTop: '4px', lineHeight: '1.4' }}>{tooltips.carryover}</div>
+</div>
+
+<div style={{ ...cardStyle, borderLeftColor: colors.success }}>
+  <div style={{ fontSize: '11px', color: colors.muted }}>적립 ({earnData.length})</div>
+  <div style={{ fontSize: '15px', fontWeight: '600', color: colors.success }}>+{monthlyTotals.earned.toLocaleString()}</div>
+  <div style={{ fontSize: '9px', color: colors.muted, marginTop: '4px', lineHeight: '1.4' }}>{tooltips.earned}</div>
+</div>
+
+<div style={{ ...cardStyle, borderLeftColor: colors.danger }}>
+  <div style={{ fontSize: '11px', color: colors.muted }}>사용 ({useData.length})</div>
+  <div style={{ fontSize: '15px', fontWeight: '600', color: colors.danger }}>{monthlyTotals.used.toLocaleString()}</div>
+  <div style={{ fontSize: '9px', color: colors.muted, marginTop: '4px', lineHeight: '1.4' }}>{tooltips.used}</div>
+</div>
+
+<div style={{ ...cardStyle, borderLeftColor: colors.primary, backgroundColor: '#f0f4f8' }}>
+  <div style={{ fontSize: '11px', color: colors.muted }}>잔여</div>
+  <div style={{ fontSize: '15px', fontWeight: '600', color: colors.primary }}>{monthlyTotals.balance.toLocaleString()}</div>
+  <div style={{ fontSize: '9px', color: colors.muted, marginTop: '4px', lineHeight: '1.4' }}>{tooltips.balance}</div>
+</div>
+
+<div style={{ ...cardStyle, borderLeftColor: colors.warning, backgroundColor: '#fffbeb' }}>
+  <div style={{ fontSize: '11px', color: colors.warning }}>소멸예정</div>
+  <div style={{ fontSize: '15px', fontWeight: '600', color: colors.warning }}>{expiringPoint.toLocaleString()}</div>
+  <div style={{ fontSize: '9px', color: colors.muted, marginTop: '4px', lineHeight: '1.4' }}>{tooltips.expiring}</div>
+</div>
 
               <div style={{ marginBottom: '12px' }}>
                 <button style={mainTabStyle('earn')} onClick={() => { setMainTab('earn'); setSearchTerm(''); }}>+ 적립내역</button>
@@ -428,4 +450,5 @@
   </script>
 </body>
 </html>
+
 
