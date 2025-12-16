@@ -22,8 +22,6 @@
       'TMPDS8b09cd30f54e476', 'TMPDSd27bf78fb8e546a', 'TMPDSd5034a6fbad64be',
       'TMPDS77970861beae492', 'TMPDS28c045ff094843a', 'TMPDS4ccba6a2a15040e',
       'TMPDS731a0fb561354e0', 'TMPDS9fb6acec8fe14b8', 'TMPDSa9f21742c6e1b84',
-      'TMPDSbe986ec7c433849', 'TMPDS8bd3fdb73d1567b', 'TMPNWMYpCNUd',
-      'TMPDSaf7d8c583b66436', 'TMPDS67dd176912d5455', 'TMPDSccb24e006707483', 'TMPDS398d1f4467c9449','TMPDS3cef2cb2c2cd343',
       'TMPDSe5a4afa77d6346f', 'TMPDS1e7083124613423', 'TMPDSabb9d72cecd244d',
       'TMPDS4ecbd717abc5486', 'TMPDS87a0f273848f4d2', 'TMPDSc788cf5178fa428', 'dongatest',
     ];
@@ -297,7 +295,6 @@
         const map = new Map();
         const sorted = [...monthlyAllData].sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
         
-        // 사용자별로 데이터 수집
         sorted.forEach(row => {
           const id = row['고객ID'], name = row['고객명'], point = Number(row['포인트'])||0, total = Number(row['토탈포인트'])||0, type = row['타입'], date = row['처리일']||'';
           const orderNo = row['주문번호'] || '';
@@ -313,39 +310,51 @@
           
           u.transactions.push({ date, type: isCancel ? '적립취소' : type, point, total, orderNo: String(orderNo), memo: row['사용자메모'] || row['관리자메모'] || '', status: row['주문상태'] || '' });
           
-          // 주문번호별 그룹핑 (같은 주문번호의 거래들)
+          // 주문번호별 그룹핑
           if (orderNo && orderNo !== '-') {
-            if (!u.orderGroups.has(orderNo)) u.orderGroups.set(orderNo, []);
-            u.orderGroups.get(orderNo).push({ date, total });
+            if (!u.orderGroups.has(orderNo)) {
+              u.orderGroups.set(orderNo, { points: [], totals: [], startTotal: total });
+            }
+            const group = u.orderGroups.get(orderNo);
+            group.points.push(point);
+            group.totals.push(total);
+            // 그룹의 첫 토탈을 시작점으로 (포인트 변화 전)
+            if (total - point < group.startTotal) {
+              group.startTotal = total - point;
+            }
           }
         });
         
         // 최종 토탈포인트 계산
         map.forEach((u, id) => {
-          // 주문번호별로 그룹화된 거래 중 각 그룹의 최댓값들을 비교
-          let maxTotal = 0;
-          let hasOrderGroup = false;
+          let finalTotal = 0;
+          let lastDate = '';
           
-          u.orderGroups.forEach((group, orderNo) => {
-            // 같은 주문번호 내에서 토탈포인트 최댓값
-            const groupMax = Math.max(...group.map(g => g.total));
-            if (groupMax > maxTotal) maxTotal = groupMax;
-            hasOrderGroup = true;
-          });
+          // 주문번호별로 처리
+          const processedOrders = new Set();
           
-          // 주문번호 없는 거래들도 확인
-          u.transactions.forEach(tx => {
-            if (!tx.orderNo || tx.orderNo === '-') {
-              if (tx.total > maxTotal) maxTotal = tx.total;
+          u.transactions.sort((a,b) => a.date.localeCompare(b.date)).forEach(tx => {
+            if (tx.orderNo && tx.orderNo !== '-') {
+              // 같은 주문번호는 한 번만 처리
+              if (!processedOrders.has(tx.orderNo)) {
+                processedOrders.add(tx.orderNo);
+                const group = u.orderGroups.get(tx.orderNo);
+                if (group) {
+                  // 시작 토탈 + 포인트 변화량 합계
+                  const pointSum = group.points.reduce((sum, p) => sum + p, 0);
+                  const groupStartTotal = Math.max(...group.totals);
+                  finalTotal = groupStartTotal + pointSum;
+                  lastDate = tx.date;
+                }
+              }
+            } else {
+              // 주문번호 없는 거래는 개별 처리
+              finalTotal = tx.total;
+              lastDate = tx.date;
             }
           });
           
-          // 전체 거래 중 최댓값 (fallback)
-          if (!hasOrderGroup && u.transactions.length > 0) {
-            maxTotal = Math.max(...u.transactions.map(tx => tx.total));
-          }
-          
-          u.currentPoint = maxTotal;
+          u.currentPoint = finalTotal || 0;
         });
         
         if (selectedMonth) {
@@ -965,5 +974,4 @@
   </script>
 </body>
 </html>
-
 
