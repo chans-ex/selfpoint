@@ -294,12 +294,14 @@
       const userStats = useMemo(() => {
         const map = new Map();
         const sorted = [...monthlyAllData].sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+        
+        // 사용자별로 데이터 수집
         sorted.forEach(row => {
           const id = row['고객ID'], name = row['고객명'], point = Number(row['포인트'])||0, total = Number(row['토탈포인트'])||0, type = row['타입'], date = row['처리일']||'';
           const orderNo = row['주문번호'] || '';
           const isCancel = isCancelTransaction(row);
           
-          if (!map.has(id)) map.set(id, { id, name, startPoint:0, earnedPoint:0, usedPoint:0, canceledPoint:0, currentPoint:0, calculatedPoint:0, mismatch:false, transactions:[], lastDate:'', lastOrderNo:'' });
+          if (!map.has(id)) map.set(id, { id, name, startPoint:0, earnedPoint:0, usedPoint:0, canceledPoint:0, currentPoint:0, calculatedPoint:0, mismatch:false, transactions:[], orderGroups: new Map() });
           const u = map.get(id);
           u.name = name;
           
@@ -307,10 +309,43 @@
           else if (type === '사용') u.usedPoint += point;
           else u.earnedPoint += point;
           
-          if (date > u.lastDate) { u.currentPoint = total; u.lastDate = date; u.lastOrderNo = orderNo; }
-          else if (date === u.lastDate && total < u.currentPoint) u.currentPoint = total;
           u.transactions.push({ date, type: isCancel ? '적립취소' : type, point, total, orderNo: String(orderNo), memo: row['사용자메모'] || row['관리자메모'] || '', status: row['주문상태'] || '' });
+          
+          // 주문번호별 그룹핑 (같은 주문번호의 거래들)
+          if (orderNo && orderNo !== '-') {
+            if (!u.orderGroups.has(orderNo)) u.orderGroups.set(orderNo, []);
+            u.orderGroups.get(orderNo).push({ date, total });
+          }
         });
+        
+        // 최종 토탈포인트 계산
+        map.forEach((u, id) => {
+          // 주문번호별로 그룹화된 거래 중 각 그룹의 최댓값들을 비교
+          let maxTotal = 0;
+          let hasOrderGroup = false;
+          
+          u.orderGroups.forEach((group, orderNo) => {
+            // 같은 주문번호 내에서 토탈포인트 최댓값
+            const groupMax = Math.max(...group.map(g => g.total));
+            if (groupMax > maxTotal) maxTotal = groupMax;
+            hasOrderGroup = true;
+          });
+          
+          // 주문번호 없는 거래들도 확인
+          u.transactions.forEach(tx => {
+            if (!tx.orderNo || tx.orderNo === '-') {
+              if (tx.total > maxTotal) maxTotal = tx.total;
+            }
+          });
+          
+          // 전체 거래 중 최댓값 (fallback)
+          if (!hasOrderGroup && u.transactions.length > 0) {
+            maxTotal = Math.max(...u.transactions.map(tx => tx.total));
+          }
+          
+          u.currentPoint = maxTotal;
+        });
+        
         if (selectedMonth) {
           const prevData = realData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
           const prevUser = new Map();
