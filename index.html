@@ -49,16 +49,29 @@
       return '';
     };
 
+    // 취소 여부 판단
+    const isCancelTransaction = (row) => {
+      if (row['타입'] !== '사용') return false;
+      const company = row['업체명'] || '';
+      const adminMemo = row['관리자메모'] || '';
+      const userMemo = row['사용자메모'] || '';
+      
+      // 업체명 없음 OR 메모에 "취소" 포함
+      return !company || adminMemo.includes('취소') || userMemo.includes('취소');
+    };
+
     function App() {
       const [data, setData] = useState([]);
       const [fileName, setFileName] = useState('');
       const [mainTab, setMainTab] = useState('earn');
       const [useSubTab, setUseSubTab] = useState('company');
+      const [cancelSubTab, setCancelSubTab] = useState('type');
       const [searchTerm, setSearchTerm] = useState('');
       const [selectedMonth, setSelectedMonth] = useState('');
       const [showCanceled, setShowCanceled] = useState(false);
       const [expandedUser, setExpandedUser] = useState(null);
       const [expandedEarn, setExpandedEarn] = useState(null);
+      const [expandedCancel, setExpandedCancel] = useState(null);
       const [showMismatchOnly, setShowMismatchOnly] = useState(false);
 
       const handleFileUpload = (e) => {
@@ -115,8 +128,10 @@
       
       const availableMonths = useMemo(() => { const m = new Set(); realData.forEach(r => { const d = r['처리일'] || ''; const match = d.match(/(\d{4})\/(\d{2})/); if(match) m.add(match[1]+'-'+match[2]); }); return Array.from(m).sort().reverse(); }, [realData]);
       
+      // 적립/사용/취소 데이터 분리
       const earnData = useMemo(() => monthlyData.filter(r => r['타입'] !== '사용'), [monthlyData]);
-      const useData = useMemo(() => monthlyData.filter(r => r['타입'] === '사용'), [monthlyData]);
+      const useData = useMemo(() => monthlyData.filter(r => r['타입'] === '사용' && !isCancelTransaction(r)), [monthlyData]);
+      const cancelData = useMemo(() => monthlyData.filter(r => isCancelTransaction(r)), [monthlyData]);
 
       const carryoverPoint = useMemo(() => {
         if (!selectedMonth) return 0;
@@ -128,11 +143,12 @@
       }, [validData, selectedMonth]);
 
       const monthlyTotals = useMemo(() => {
-        let used=0, earned=0;
+        let used=0, earned=0, canceled=0;
         useData.forEach(r => { used += Number(r['포인트'])||0; });
         earnData.forEach(r => { earned += Number(r['포인트'])||0; });
-        return { used, earned, carryover: carryoverPoint, balance: carryoverPoint + earned + used };
-      }, [useData, earnData, carryoverPoint]);
+        cancelData.forEach(r => { canceled += Number(r['포인트'])||0; });
+        return { used, earned, canceled, carryover: carryoverPoint, balance: carryoverPoint + earned + used + canceled };
+      }, [useData, earnData, cancelData, carryoverPoint]);
 
       const expiringPoint = useMemo(() => {
         if (!selectedMonth) return 0;
@@ -168,22 +184,81 @@
         });
         return Array.from(map.values()).map(item => ({
           memo: item.memo, totalPoint: item.totalPoint, userCount: item.users.size, isCancelRefund: item.isCancelRefund,
-          dateList: Array.from(item.dates.entries()).sort((a,b) => a[0].localeCompare(b[0])).map(([date, data]) => ({ date, point: data.point, count: data.count }))
-        })).sort((a,b) => b.totalPoint - a.totalPoint);
+          dateList: Array.from(item.dates.entries()).map(([d, v]) => ({ date: d, point: v.point, count: v.count })).sort((a,b) => a.date.localeCompare(b.date))
+        })).sort((a,b) => {
+          if (a.isCancelRefund && !b.isCancelRefund) return 1;
+          if (!a.isCancelRefund && b.isCancelRefund) return -1;
+          return b.totalPoint - a.totalPoint;
+        });
       }, [earnData]);
+
+      // 취소내역: 유형별
+      const cancelByType = useMemo(() => {
+        const map = new Map();
+        cancelData.forEach(row => {
+          let memo = (row['관리자메모'] || row['사용자메모'] || '(메모없음)').trim().replace(/\n/g, '');
+          const point = Math.abs(Number(row['포인트']) || 0);
+          const userId = row['고객ID'];
+          const date = (row['처리일'] || '').substring(0, 10);
+          if (!map.has(memo)) map.set(memo, { memo, totalPoint: 0, users: new Set(), dates: new Map() });
+          const item = map.get(memo);
+          item.totalPoint += point;
+          item.users.add(userId);
+          if (!item.dates.has(date)) item.dates.set(date, { point: 0, count: 0 });
+          item.dates.get(date).point += point;
+          item.dates.get(date).count += 1;
+        });
+        return Array.from(map.values()).map(item => ({
+          memo: item.memo, totalPoint: item.totalPoint, userCount: item.users.size,
+          dateList: Array.from(item.dates.entries()).map(([d, v]) => ({ date: d, point: v.point, count: v.count })).sort((a,b) => a.date.localeCompare(b.date))
+        })).sort((a,b) => b.totalPoint - a.totalPoint);
+      }, [cancelData]);
+
+      // 취소내역: 사용자별
+      const cancelUserStats = useMemo(() => {
+        const map = new Map();
+        cancelData.forEach(row => {
+          const id = row['고객ID'];
+          const name = row['고객명'];
+          const point = Math.abs(Number(row['포인트']) || 0);
+          const date = row['처리일'] || '';
+          const memo = row['관리자메모'] || row['사용자메모'] || '';
+          
+          if (!map.has(id)) map.set(id, { id, name, totalPoint: 0, transactions: [] });
+          const user = map.get(id);
+          user.totalPoint += point;
+          user.transactions.push({ date, point, memo });
+        });
+        return Array.from(map.values()).sort((a,b) => b.totalPoint - a.totalPoint);
+      }, [cancelData]);
 
       const companyStats = useMemo(() => {
         const map = new Map();
         useData.forEach(row => {
           const company = row['업체명'] || 'CS 수동차감';
-          const point = Math.abs(Number(row['포인트']) || 0);
+          const point = Number(row['포인트']) || 0;
           const userId = row['고객ID'];
-          if (!map.has(company)) map.set(company, { company, usedPoint: 0, users: new Set(), category: getCompanyCategory(company) });
+          const category = getCompanyCategory(company);
+          if (!map.has(company)) map.set(company, { company, usedPoint: 0, users: new Set(), category });
           map.get(company).usedPoint += point;
           map.get(company).users.add(userId);
         });
-        return Array.from(map.values()).map(item => ({ company: item.company, usedPoint: item.usedPoint, userCount: item.users.size, category: item.category })).sort((a,b) => b.usedPoint - a.usedPoint);
+        return Array.from(map.values()).map(c => ({ company: c.company, usedPoint: c.usedPoint, userCount: c.users.size, category: c.category })).sort((a,b) => {
+          const order = { subscription: 0, digital: 1, store: 2, etc: 3 };
+          if (order[a.category] !== order[b.category]) return order[a.category] - order[b.category];
+          if (a.company === 'CS 수동차감') return 1;
+          if (b.company === 'CS 수동차감') return -1;
+          return a.usedPoint - b.usedPoint;
+        });
       }, [useData]);
+
+      const categoryTotals = useMemo(() => {
+        const totals = { subscription: 0, digital: 0, store: 0, etc: 0 };
+        companyStats.forEach(c => {
+          totals[c.category] += c.usedPoint;
+        });
+        return totals;
+      }, [companyStats]);
 
       const productStats = useMemo(() => {
         const map = new Map();
@@ -222,13 +297,19 @@
         sorted.forEach(row => {
           const id = row['고객ID'], name = row['고객명'], point = Number(row['포인트'])||0, total = Number(row['토탈포인트'])||0, type = row['타입'], date = row['처리일']||'';
           const orderNo = row['주문번호'] || '';
-          if (!map.has(id)) map.set(id, { id, name, startPoint:0, earnedPoint:0, usedPoint:0, currentPoint:0, calculatedPoint:0, mismatch:false, transactions:[], lastDate:'', lastOrderNo:'' });
+          const isCancel = isCancelTransaction(row);
+          
+          if (!map.has(id)) map.set(id, { id, name, startPoint:0, earnedPoint:0, usedPoint:0, canceledPoint:0, currentPoint:0, calculatedPoint:0, mismatch:false, transactions:[], lastDate:'', lastOrderNo:'' });
           const u = map.get(id);
           u.name = name;
-          if (type === '사용') u.usedPoint += point; else u.earnedPoint += point;
+          
+          if (isCancel) u.canceledPoint += point;
+          else if (type === '사용') u.usedPoint += point;
+          else u.earnedPoint += point;
+          
           if (date > u.lastDate) { u.currentPoint = total; u.lastDate = date; u.lastOrderNo = orderNo; }
           else if (date === u.lastDate && total < u.currentPoint) u.currentPoint = total;
-          u.transactions.push({ date, type, point, total, orderNo: String(orderNo), memo: row['사용자메모'] || row['관리자메모'] || '', status: row['주문상태'] || '' });
+          u.transactions.push({ date, type: isCancel ? '적립취소' : type, point, total, orderNo: String(orderNo), memo: row['사용자메모'] || row['관리자메모'] || '', status: row['주문상태'] || '' });
         });
         if (selectedMonth) {
           const prevData = realData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
@@ -244,49 +325,35 @@
               const sumPoints = sameDateTx.reduce((s, t) => s + t.point, 0);
               u.startPoint = minTotal - sumPoints;
             }
-            u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint;
+            u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
         }
-        return Array.from(map.values()).filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0).sort((a,b) => a.usedPoint - b.usedPoint);
+        return Array.from(map.values()).filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0 || u.canceledPoint !== 0).sort((a,b) => a.usedPoint - b.usedPoint);
       }, [monthlyAllData, realData, selectedMonth]);
 
-      const filteredCompanyStats = useMemo(() => {
-        if (!searchTerm) return companyStats;
-        return companyStats.filter(c => c.company.toLowerCase().includes(searchTerm.toLowerCase()));
-      }, [companyStats, searchTerm]);
-
-      const filteredProductStats = useMemo(() => {
-        if (!searchTerm) return productStats;
-        const term = searchTerm.toLowerCase();
-        return productStats.filter(p => p.productCode.toLowerCase().includes(term) || p.company.toLowerCase().includes(term) || p.productName.toLowerCase().includes(term));
-      }, [productStats, searchTerm]);
-
-      const filteredUserStats = useMemo(() => {
-        let result = userStats;
-        if (showMismatchOnly) result = result.filter(u => u.mismatch);
-        if (!searchTerm) return result;
-        const term = searchTerm.toLowerCase();
-        return result.filter(u => u.id.toLowerCase().includes(term) || u.name.toLowerCase().includes(term));
-      }, [userStats, searchTerm, showMismatchOnly]);
-
       const mismatchCount = useMemo(() => userStats.filter(u => u.mismatch).length, [userStats]);
-
-      const categoryTotals = useMemo(() => {
-        const totals = { subscription: 0, digital: 0, store: 0, etc: 0 };
-        companyStats.forEach(c => totals[c.category] += c.usedPoint);
-        return totals;
-      }, [companyStats]);
+      const filteredEarnByType = useMemo(() => !searchTerm ? earnByType : earnByType.filter(e => e.memo.toLowerCase().includes(searchTerm.toLowerCase())), [earnByType, searchTerm]);
+      const filteredCompanyStats = useMemo(() => !searchTerm ? companyStats : companyStats.filter(c => c.company.toLowerCase().includes(searchTerm.toLowerCase())), [companyStats, searchTerm]);
+      const filteredProductStats = useMemo(() => !searchTerm ? productStats : productStats.filter(p => p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) || p.company.toLowerCase().includes(searchTerm.toLowerCase()) || p.productName.toLowerCase().includes(searchTerm.toLowerCase())), [productStats, searchTerm]);
+      const filteredUserStats = useMemo(() => { let r = showMismatchOnly ? userStats.filter(u => u.mismatch) : userStats; if(!searchTerm) return r; const l = searchTerm.toLowerCase(); return r.filter(u => (u.name||'').toLowerCase().includes(l) || (u.id||'').toLowerCase().includes(l)); }, [userStats, searchTerm, showMismatchOnly]);
+      const filteredCancelByType = useMemo(() => !searchTerm ? cancelByType : cancelByType.filter(c => c.memo.toLowerCase().includes(searchTerm.toLowerCase())), [cancelByType, searchTerm]);
+      const filteredCancelUserStats = useMemo(() => { if(!searchTerm) return cancelUserStats; const l = searchTerm.toLowerCase(); return cancelUserStats.filter(u => (u.name||'').toLowerCase().includes(l) || (u.id||'').toLowerCase().includes(l)); }, [cancelUserStats, searchTerm]);
 
       const handleDownload = () => {
         let exportData = [];
-        if (useSubTab === 'company') exportData = filteredCompanyStats.map(c => ({ 구분: getCategoryLabel(c.category), 업체명: c.company, 사용포인트: c.usedPoint, 인원: c.userCount }));
-        else if (useSubTab === 'product') exportData = filteredProductStats.map(p => ({ 상품코드: p.productCode, 입점사: p.company, 상품명: p.productName, 사용포인트: p.usedPoint, 인원: p.userCount }));
-        else if (useSubTab === 'user') exportData = filteredUserStats.map(u => ({ 아이디: u.id, 이름: u.name, 시작: u.startPoint, 적립: u.earnedPoint, 사용: u.usedPoint, 잔여: u.currentPoint, 검증: u.mismatch ? '불일치' : '정상' }));
+        if (mainTab === 'use') {
+          if (useSubTab === 'company') exportData = filteredCompanyStats.map(c => ({ 구분: getCategoryLabel(c.category), 업체명: c.company, 사용포인트: c.usedPoint, 인원: c.userCount }));
+          else if (useSubTab === 'product') exportData = filteredProductStats.map(p => ({ 상품코드: p.productCode, 입점사: p.company, 상품명: p.productName, 사용포인트: p.usedPoint, 인원: p.userCount }));
+          else if (useSubTab === 'user') exportData = filteredUserStats.map(u => ({ 아이디: u.id, 이름: u.name, 시작: u.startPoint, 적립: u.earnedPoint, 사용: u.usedPoint, 적립취소: u.canceledPoint, 잔여: u.currentPoint, 검증: u.mismatch ? '불일치' : '정상' }));
+        } else if (mainTab === 'cancel') {
+          if (cancelSubTab === 'type') exportData = filteredCancelByType.map(c => ({ 취소유형: c.memo, 취소포인트: c.totalPoint, 인원: c.userCount }));
+          else exportData = filteredCancelUserStats.map(u => ({ 아이디: u.id, 이름: u.name, 취소포인트: u.totalPoint }));
+        }
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-        XLSX.writeFile(wb, `포인트_${useSubTab}_${new Date().toISOString().slice(0,10)}.xlsx`);
+        XLSX.writeFile(wb, `포인트_${mainTab}_${new Date().toISOString().slice(0,10)}.xlsx`);
       };
 
       const colors = {
@@ -294,6 +361,7 @@
         success: '#059669',
         danger: '#dc2626',
         warning: '#f59e0b',
+        cancel: '#8b5cf6',
         muted: '#6b7280',
         border: '#d1d5db',
         light: '#f3f4f6',
@@ -303,8 +371,9 @@
       const tooltips = {
         carryover: '전월이월: 지난달 잔여와 동일한 금액입니다. 지난달 말 기준 각 사용자의 마지막 토탈포인트 합계입니다.',
         earned: '적립: 이번 달에 새로 적립된 포인트 총액입니다. (이벤트, 구독 혜택 등)',
-        used: '사용: 이번 달에 상품 구매 등으로 사용된 포인트 총액입니다. (마이너스 금액)',
-        balance: '잔여: 전월이월 + 적립 + 사용으로 계산됩니다. 이번 달 말 기준 예상 잔여 포인트입니다.',
+        used: '사용: 이번 달에 상품 구매 등으로 실제 사용된 포인트 총액입니다.',
+        canceled: '적립취소: 정기구독 취소 등으로 CS에서 차감한 포인트 총액입니다.',
+        balance: '잔여: 전월이월 + 적립 + 사용 + 적립취소로 계산됩니다. 이번 달 말 기준 예상 잔여 포인트입니다.',
         expiring: '소멸예정: 이번 달 말까지 소멸 예정인 포인트입니다. 다음 달에는 이 금액이 사라집니다.'
       };
 
@@ -315,7 +384,7 @@
         borderRadius: '8px', 
         borderLeft: '4px solid', 
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        minWidth: '180px'
+        minWidth: '160px'
       };
 
       const btnStyle = {
@@ -354,12 +423,12 @@
       const subTabStyle = (tab) => ({
         padding: '12px 24px',
         border: 'none',
-        background: useSubTab === tab ? 'white' : 'transparent',
-        color: useSubTab === tab ? colors.dark : colors.muted,
+        background: (mainTab === 'use' ? useSubTab : cancelSubTab) === tab ? 'white' : 'transparent',
+        color: (mainTab === 'use' ? useSubTab : cancelSubTab) === tab ? colors.dark : colors.muted,
         cursor: 'pointer',
         fontSize: '14px',
-        fontWeight: useSubTab === tab ? '600' : '400',
-        borderBottom: useSubTab === tab ? '3px solid #1e40af' : '3px solid transparent',
+        fontWeight: (mainTab === 'use' ? useSubTab : cancelSubTab) === tab ? '600' : '400',
+        borderBottom: (mainTab === 'use' ? useSubTab : cancelSubTab) === tab ? '3px solid #1e40af' : '3px solid transparent',
         transition: 'all 0.2s'
       });
 
@@ -456,6 +525,12 @@
                     <div style={{ fontSize: '10px', color: colors.muted, lineHeight: '1.4', opacity: 0.8 }}>{tooltips.used}</div>
                   </div>
 
+                  <div style={{ ...cardStyle, borderLeftColor: colors.cancel }}>
+                    <div style={{ fontSize: '12px', color: colors.muted, marginBottom: '4px', fontWeight: '500' }}>적립취소 ({cancelData.length})</div>
+                    <div style={{ fontSize: '24px', fontWeight: '700', color: colors.cancel, marginBottom: '8px' }}>{monthlyTotals.canceled.toLocaleString()}</div>
+                    <div style={{ fontSize: '10px', color: colors.muted, lineHeight: '1.4', opacity: 0.8 }}>{tooltips.canceled}</div>
+                  </div>
+
                   <div style={{ ...cardStyle, borderLeftColor: colors.primary, backgroundColor: '#eff6ff' }}>
                     <div style={{ fontSize: '12px', color: colors.muted, marginBottom: '4px', fontWeight: '500' }}>잔여</div>
                     <div style={{ fontSize: '24px', fontWeight: '700', color: colors.primary, marginBottom: '8px' }}>{monthlyTotals.balance.toLocaleString()}</div>
@@ -477,13 +552,17 @@
                   <button style={tabStyle(mainTab === 'use')} onClick={() => setMainTab('use')}>
                     사용 내역
                   </button>
+                  <button style={tabStyle(mainTab === 'cancel')} onClick={() => setMainTab('cancel')}>
+                    취소 내역
+                  </button>
                 </div>
 
-                {/* Content */}
+                {/* Earn Tab Content */}
                 {mainTab === 'earn' && (
                   <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-                    <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid ' + colors.border, fontSize: '13px', color: colors.muted, fontWeight: '500' }}>
-                      {earnByType.length}개 적립 유형
+                    <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid ' + colors.border, display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <input type="text" placeholder="적립 유형 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                      <span style={{ fontSize: '13px', color: colors.muted, fontWeight: '500' }}>{filteredEarnByType.length}개 유형</span>
                     </div>
                     <div style={{ maxHeight: 'calc(100vh - 480px)', overflowY: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -496,9 +575,9 @@
                           </tr>
                         </thead>
                         <tbody>
-                          {earnByType.map((e, i) => (
+                          {filteredEarnByType.map((e, i) => (
                             <Fragment key={i}>
-                              <tr style={{ cursor: 'pointer', backgroundColor: expandedEarn === i ? '#f9fafb' : 'transparent' }} onClick={() => setExpandedEarn(expandedEarn === i ? null : i)}>
+                              <tr style={{ cursor: 'pointer', backgroundColor: expandedEarn === i ? '#f9fafb' : (i % 2 === 0 ? 'white' : '#fafafa') }} onClick={() => setExpandedEarn(expandedEarn === i ? null : i)}>
                                 <td style={tdStyle}>{expandedEarn === i ? '▼' : '▶'}</td>
                                 <td style={{ ...tdStyle, fontStyle: e.isCancelRefund ? 'italic' : 'normal', color: e.isCancelRefund ? colors.muted : '#374151' }}>{e.memo}</td>
                                 <td style={{ ...tdStyle, textAlign: 'right', color: e.isCancelRefund ? colors.warning : colors.success, fontWeight: '600', fontSize: '14px' }}>+{e.totalPoint.toLocaleString()}</td>
@@ -538,6 +617,7 @@
                   </div>
                 )}
 
+                {/* Use Tab Content */}
                 {mainTab === 'use' && (
                   <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', borderBottom: '2px solid #f3f4f6' }}>
@@ -646,8 +726,9 @@
                                 <th style={thStyle}>아이디</th>
                                 <th style={thStyle}>이름</th>
                                 <th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>시작</th>
-                                <th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>적립</th>
-                                <th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>사용</th>
+                                <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>적립</th>
+                                <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>사용</th>
+                                <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>적립취소</th>
                                 <th style={{ ...thStyle, textAlign: 'right', width: '90px' }}>잔여</th>
                                 <th style={{ ...thStyle, textAlign: 'center', width: '60px' }}>검증</th>
                               </tr>
@@ -662,6 +743,7 @@
                                     <td style={{ ...tdStyle, textAlign: 'right', color: colors.muted }}>{u.startPoint.toLocaleString()}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', color: colors.success, fontWeight: '500' }}>+{u.earnedPoint.toLocaleString()}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', color: colors.danger, fontWeight: '600' }}>{u.usedPoint.toLocaleString()}</td>
+                                    <td style={{ ...tdStyle, textAlign: 'right', color: colors.cancel, fontWeight: '600' }}>{u.canceledPoint.toLocaleString()}</td>
                                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: '700', color: colors.primary, fontSize: '14px' }}>{u.currentPoint.toLocaleString()}</td>
                                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                                       {u.mismatch ? <span style={{ color: colors.danger, fontSize: '16px', fontWeight: 'bold' }}>✗</span> : <span style={{ color: colors.success, fontSize: '16px', fontWeight: 'bold' }}>✓</span>}
@@ -669,10 +751,10 @@
                                   </tr>
                                   {expandedUser === i && (
                                     <tr>
-                                      <td colSpan={8} style={{ padding: '0', backgroundColor: '#f9fafb' }}>
+                                      <td colSpan={9} style={{ padding: '0', backgroundColor: '#f9fafb' }}>
                                         <div style={{ padding: '16px 20px' }}>
                                           <div style={{ fontSize: '11px', color: colors.muted, marginBottom: '12px', padding: '8px 12px', backgroundColor: 'white', borderRadius: '6px', display: 'inline-block', border: '1px solid ' + colors.border }}>
-                                            <strong>계산식:</strong> {u.startPoint.toLocaleString()} + {u.earnedPoint.toLocaleString()} + ({u.usedPoint.toLocaleString()}) = {u.calculatedPoint.toLocaleString()}
+                                            <strong>계산식:</strong> {u.startPoint.toLocaleString()} + {u.earnedPoint.toLocaleString()} + ({u.usedPoint.toLocaleString()}) + ({u.canceledPoint.toLocaleString()}) = {u.calculatedPoint.toLocaleString()}
                                             {u.mismatch && <span style={{ color: colors.danger, marginLeft: '12px', fontWeight: 'bold' }}>≠ 실제 {u.currentPoint.toLocaleString()}</span>}
                                           </div>
                                           <table style={{ width: '100%', fontSize: '12px', backgroundColor: 'white', borderRadius: '6px', overflow: 'hidden' }}>
@@ -691,11 +773,18 @@
                                                 <tr key={j} style={{ backgroundColor: tx.status === '취소완료' ? '#fef2f2' : 'transparent' }}>
                                                   <td style={{ padding: '10px 12px', borderBottom: '1px solid #f3f4f6' }}>{tx.date}</td>
                                                   <td style={{ padding: '10px 12px', borderBottom: '1px solid #f3f4f6' }}>
-                                                    <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '500', backgroundColor: tx.type === '사용' ? '#fef2f2' : '#f0fdf4', color: tx.type === '사용' ? colors.danger : colors.success }}>{tx.type}</span>
+                                                    <span style={{ 
+                                                      padding: '3px 8px', 
+                                                      borderRadius: '4px', 
+                                                      fontSize: '10px', 
+                                                      fontWeight: '500', 
+                                                      backgroundColor: tx.type === '적립취소' ? '#f3e8ff' : (tx.type === '사용' ? '#fef2f2' : '#f0fdf4'), 
+                                                      color: tx.type === '적립취소' ? colors.cancel : (tx.type === '사용' ? colors.danger : colors.success) 
+                                                    }}>{tx.type}</span>
                                                     {tx.status === '취소완료' && <span style={{ marginLeft: '6px', fontSize: '10px', color: colors.muted }}>(취소)</span>}
                                                   </td>
                                                   <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '11px', color: colors.muted, borderBottom: '1px solid #f3f4f6' }}>{tx.orderNo || '-'}</td>
-                                                  <td style={{ padding: '10px 12px', textAlign: 'right', color: tx.point < 0 ? colors.danger : colors.success, fontWeight: '600', borderBottom: '1px solid #f3f4f6' }}>{tx.point > 0 ? '+' : ''}{tx.point.toLocaleString()}</td>
+                                                  <td style={{ padding: '10px 12px', textAlign: 'right', color: tx.point < 0 ? (tx.type === '적립취소' ? colors.cancel : colors.danger) : colors.success, fontWeight: '600', borderBottom: '1px solid #f3f4f6' }}>{tx.point > 0 ? '+' : ''}{tx.point.toLocaleString()}</td>
                                                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '500', borderBottom: '1px solid #f3f4f6' }}>{tx.total.toLocaleString()}</td>
                                                   <td style={{ padding: '10px 12px', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: colors.muted, borderBottom: '1px solid #f3f4f6' }} title={tx.memo}>{tx.memo || '-'}</td>
                                                 </tr>
@@ -707,6 +796,106 @@
                                     </tr>
                                   )}
                                 </Fragment>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Fragment>
+                    )}
+                  </div>
+                )}
+
+                {/* Cancel Tab Content */}
+                {mainTab === 'cancel' && (
+                  <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', borderBottom: '2px solid #f3f4f6' }}>
+                      <button style={subTabStyle('type')} onClick={() => { setCancelSubTab('type'); setSearchTerm(''); }}>유형별</button>
+                      <button style={subTabStyle('user')} onClick={() => { setCancelSubTab('user'); setSearchTerm(''); }}>사용자별</button>
+                    </div>
+                    <div style={{ padding: '12px 16px', display: 'flex', gap: '10px', borderBottom: '1px solid ' + colors.border, alignItems: 'center', backgroundColor: '#f9fafb' }}>
+                      <input type="text" placeholder={cancelSubTab === 'type' ? '취소 유형 검색...' : '이름/ID 검색...'} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                      <button onClick={handleDownload} style={{ ...btnStyle, backgroundColor: colors.primary }}>엑셀 다운로드</button>
+                    </div>
+
+                    {cancelSubTab === 'type' && (
+                      <Fragment>
+                        <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid ' + colors.border, fontSize: '12px', color: colors.muted, fontWeight: '500' }}>
+                          {filteredCancelByType.length}개 유형
+                        </div>
+                        <div style={{ maxHeight: 'calc(100vh - 410px)', overflowY: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                              <tr>
+                                <th style={{ ...thStyle, width: '30px' }}></th>
+                                <th style={thStyle}>취소 유형</th>
+                                <th style={{ ...thStyle, textAlign: 'right', width: '140px' }}>취소 포인트</th>
+                                <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>인원</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredCancelByType.map((c, i) => (
+                                <Fragment key={i}>
+                                  <tr style={{ cursor: 'pointer', backgroundColor: expandedCancel === i ? '#f9fafb' : (i % 2 === 0 ? 'white' : '#fafafa') }} onClick={() => setExpandedCancel(expandedCancel === i ? null : i)}>
+                                    <td style={tdStyle}>{expandedCancel === i ? '▼' : '▶'}</td>
+                                    <td style={{ ...tdStyle, fontWeight: '500' }}>{c.memo}</td>
+                                    <td style={{ ...tdStyle, textAlign: 'right', color: colors.cancel, fontWeight: '600', fontSize: '14px' }}>{c.totalPoint.toLocaleString()}</td>
+                                    <td style={{ ...tdStyle, textAlign: 'right', color: colors.muted }}>{c.userCount}</td>
+                                  </tr>
+                                  {expandedCancel === i && (
+                                    <tr>
+                                      <td colSpan={4} style={{ padding: '0', backgroundColor: '#f9fafb' }}>
+                                        <div style={{ padding: '16px 20px' }}>
+                                          <table style={{ width: '100%', fontSize: '12px' }}>
+                                            <thead>
+                                              <tr>
+                                                <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid ' + colors.border, fontSize: '11px', color: colors.muted }}>일자</th>
+                                                <th style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid ' + colors.border, fontSize: '11px', color: colors.muted }}>포인트</th>
+                                                <th style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid ' + colors.border, fontSize: '11px', color: colors.muted }}>건수</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {c.dateList.map((d, j) => (
+                                                <tr key={j}>
+                                                  <td style={{ padding: '8px 12px' }}>{d.date}</td>
+                                                  <td style={{ padding: '8px 12px', textAlign: 'right', color: colors.cancel, fontWeight: '500' }}>{d.point.toLocaleString()}</td>
+                                                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>{d.count}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Fragment>
+                    )}
+
+                    {cancelSubTab === 'user' && (
+                      <Fragment>
+                        <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid ' + colors.border, fontSize: '12px', color: colors.muted, fontWeight: '500' }}>
+                          {filteredCancelUserStats.length}명
+                        </div>
+                        <div style={{ maxHeight: 'calc(100vh - 410px)', overflowY: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                              <tr>
+                                <th style={thStyle}>아이디</th>
+                                <th style={thStyle}>이름</th>
+                                <th style={{ ...thStyle, textAlign: 'right', width: '140px' }}>취소 포인트</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredCancelUserStats.map((u, i) => (
+                                <tr key={i} style={{ backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                                  <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '11px', color: colors.muted }}>{u.id}</td>
+                                  <td style={{ ...tdStyle, fontWeight: '600' }}>{maskName(u.name)}</td>
+                                  <td style={{ ...tdStyle, textAlign: 'right', color: colors.cancel, fontWeight: '600', fontSize: '14px' }}>{u.totalPoint.toLocaleString()}</td>
+                                </tr>
                               ))}
                             </tbody>
                           </table>
