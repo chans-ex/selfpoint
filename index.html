@@ -343,11 +343,10 @@
           if (lastOrderNos.length > 0) {
             // 마지막 날짜에 주문번호가 있으면, 그 주문번호들의 모든 거래 찾기
             const orderTxs = sortedTx.filter(tx => lastOrderNos.includes(tx.orderNo));
-            
-            // 해당 주문들의 토탈포인트 중 최댓값 = 주문 완료 후 최종 포인트
-            const maxTotal = Math.max(...orderTxs.map(tx => tx.total));
-            
-            u.currentPoint = maxTotal;
+           // 마지막 날짜에 적립이 있으면 최댓값, 사용만 있으면 최솟값
+            const hasEarn = lastDateTxs.some(tx => tx.point > 0);
+            u.currentPoint = hasEarn ? Math.max(...orderTxs.map(tx => tx.total)) : Math.min(...orderTxs.map(tx => tx.total));
+         
           } else {
             // 주문번호 없으면 마지막 날짜 거래들 중 최솟값 (최종 상태)
             u.currentPoint = Math.min(...lastDateTxs.map(tx => tx.total));
@@ -971,6 +970,7 @@
   </script>
 </body>
 </html>
+
 
 
 
