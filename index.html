@@ -534,6 +534,14 @@
     const type = r['타입'];
     return type !== '사용' && point > 0 && expireDate && expireDate.substring(0,10) <= endOfMonth;
   }).sort((a, b) => (a['소멸 예정일'] || '').localeCompare(b['소멸 예정일'] || ''));
+
+console.log('소멸 예정 상세:', {
+    allDataUntilThisMonthCount: allDataUntilThisMonth.length,
+    earnTransactionsCount: earnTransactions.length,
+    earnTransactionsTotal: earnTransactions.reduce((s, r) => s + (Number(r['포인트']) || 0), 0),
+    endOfMonth: endOfMonth
+  });
+       
   
         
         // 3단계: 사용자별로 소멸 예정 포인트 합산 (잔여 포인트 한도 내에서)
@@ -1185,6 +1193,7 @@
   </script>
 </body>
 </html>
+
 
 
 
