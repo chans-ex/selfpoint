@@ -673,7 +673,7 @@ return 0; // 임시로 0 반환
               )}
               
               {/* Google Sheets */}
-              {!isGoogleSignedIn ? (
+            {!isGoogleSignedIn ? (
                 <button onClick={handleGoogleSignIn} style={{ ...btnStyle, backgroundColor: '#4285f4' }}>
                   Google 로그인
                 </button>
@@ -689,8 +689,19 @@ return 0; // 임시로 0 반환
                   <button onClick={handleLoadSheet} style={{ ...btnStyle, backgroundColor: '#34a853' }}>
                     시트 로드
                   </button>
+                  <button onClick={() => {
+                    localStorage.removeItem('googleAccessToken');
+                    localStorage.removeItem('savedSheetUrl');
+                    setIsGoogleSignedIn(false);
+                    setGoogleAccessToken('');
+                    setSheetUrl('');
+                    setData([]);
+                  }} style={{ ...btnStyle, backgroundColor: '#dc2626' }}>
+                    로그아웃
+                  </button>
                 </>
               )}
+
               
               {/* 파일 업로드 */}
               <label style={{ ...btnStyle, cursor: 'pointer', display: 'inline-block' }}>
@@ -1153,6 +1164,7 @@ return 0; // 임시로 0 반환
   </script>
 </body>
 </html>
+
 
 
 
