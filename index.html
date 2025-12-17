@@ -502,8 +502,10 @@
       }, [monthlyAllData, realData, selectedMonth]);
 
 const expiringPoint = useMemo(() => {
-  if (!selectedMonth) return 0;
-  
+return 0; // 임시로 0 반환
+
+
+  /*
   const [year, month] = selectedMonth.split('-');
   const lastDay = new Date(Number(year), Number(month), 0).getDate();
   const endOfMonth = `${year}/${month}/${lastDay}`;
@@ -527,6 +529,8 @@ const expiringPoint = useMemo(() => {
   });
   
   return total;
+
+    */
 }, [realData, selectedMonth]);
 
 
@@ -1149,6 +1153,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
