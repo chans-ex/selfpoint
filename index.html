@@ -515,17 +515,13 @@
           return d.substring(0,7).replace('/','-') <= selectedMonth;
         });
        
-        
-        // 사용자별 잔여 포인트와 소멸 예정 계산
+    // 사용자별 잔여 포인트와 소멸 예정 계산
         const userExpiring = new Map();
         
         // 1단계: 각 사용자의 현재 잔여 포인트 (userStats에서 가져오기)
         userStats.forEach(u => {
-          if (u.currentPoint > 0) {
-            userExpiring.set(u.id, { remaining: u.currentPoint, expiring: 0 });
-          }
+          userExpiring.set(u.id, { remaining: u.currentPoint, expiring: 0 });
         });
-
           
         // 2단계: 각 사용자의 적립 거래 중 소멸 예정인 것 계산
          const earnTransactions = allDataUntilThisMonth.filter(r => {
@@ -1193,6 +1189,7 @@ console.log('소멸 예정 상세:', {
   </script>
 </body>
 </html>
+
 
 
 
