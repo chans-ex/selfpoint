@@ -32,6 +32,7 @@
     const GOOGLE_CLIENT_ID = '1017191070280-5ntddd47p1sh9q2fj8k7j3na9lcjpjoq.apps.googleusercontent.com';
     const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
     const SCOPES = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+    const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1CR26WesDpfOUjekd2_2_0shJuwhSjVNkEMq74BujL1k/edit?usp=sharing';
     
     const maskName = (name) => {
       if (!name) return '-';
@@ -128,7 +129,7 @@
       const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(() => {
         return !!localStorage.getItem('googleAccessToken');
       });
-      const [sheetUrl, setSheetUrl] = useState('');
+      const [sheetUrl, setSheetUrl] = useState(DEFAULT_SHEET_URL);
 
       
       // 페이지 로드시 저장된 URL 불러오기
@@ -139,12 +140,12 @@
         }
       }, []);
 
-      // 로그인 + URL 있으면 자동 로드
+      // 로그인 면 자동 로드
       React.useEffect(() => {
-        if (isGoogleSignedIn && googleAccessToken && sheetUrl && data.length === 0) {
+        if (isGoogleSignedIn && googleAccessToken && data.length === 0) {
           handleLoadSheet();
         }
-      }, [isGoogleSignedIn, googleAccessToken, sheetUrl]);
+      }, [isGoogleSignedIn, googleAccessToken]);
 
       
        // Google Sign In 핸들러
@@ -681,7 +682,7 @@ return 0; // 임시로 0 반환
                 <>
                   <input 
                     type="text" 
-                    placeholder="구글 시트 URL" 
+                    placeholder="기본 시트 사용 중 (변경 가능)" 
                     value={sheetUrl} 
                     onChange={(e) => setSheetUrl(e.target.value)}
                     style={{ ...inputStyle, width: '300px' }}
@@ -1164,6 +1165,7 @@ return 0; // 임시로 0 반환
   </script>
 </body>
 </html>
+
 
 
 
