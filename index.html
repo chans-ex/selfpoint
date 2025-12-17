@@ -518,6 +518,12 @@ const expiringPoint = useMemo(() => {
       userRemainingMap.set(u.id, u.currentPoint);
     }
   });
+
+ // ← 여기에 3줄 추가!
+  console.log('realData에서 적립 거래:', realData.filter(r => r['타입'] !== '사용' && (Number(r['포인트']) || 0) > 0).length, '건');
+  console.log('소멸일 있는 거래:', realData.filter(r => r['소멸 예정일']).length, '건');
+  console.log('userRemainingMap 크기:', userRemainingMap.size);
+  
   
   // realData 전체에서 적립 거래만 필터
   const allEarnTransactions = realData
@@ -1190,6 +1196,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
