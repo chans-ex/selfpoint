@@ -125,6 +125,24 @@
       const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
       const [googleAccessToken, setGoogleAccessToken] = useState('');
       const [sheetUrl, setSheetUrl] = useState('');
+
+      
+      // 페이지 로드시 저장된 URL 불러오기
+      React.useEffect(() => {
+        const savedUrl = localStorage.getItem('savedSheetUrl');
+        if (savedUrl) {
+          setSheetUrl(savedUrl);
+        }
+      }, []);
+
+      // 로그인 + URL 있으면 자동 로드
+      React.useEffect(() => {
+        if (isGoogleSignedIn && googleAccessToken && sheetUrl && data.length === 0) {
+          handleLoadSheet();
+        }
+      }, [isGoogleSignedIn, googleAccessToken, sheetUrl]);
+
+      
        // Google Sign In 핸들러
       const handleGoogleSignIn = () => {
         const client = google.accounts.oauth2.initTokenClient({
@@ -138,7 +156,7 @@
         client.requestAccessToken();
       };
 
-      // Google 시트 로드
+    // Google 시트 로드
       const handleLoadSheet = async () => {
         if (!sheetUrl) {
           alert('구글 시트 URL을 입력하세요');
@@ -148,6 +166,7 @@
           const jsonData = await loadGoogleSheetsData(googleAccessToken, sheetUrl);
           setData(jsonData);
           setFileName('Google Sheets');
+          localStorage.setItem('savedSheetUrl', sheetUrl); // ← 이 줄 추가
           if (jsonData.length > 0) {
             const firstDate = jsonData[0]['처리일'] || '';
             const match = firstDate.match(/(\d{4})\/(\d{2})/);
@@ -1110,6 +1129,7 @@
   </script>
 </body>
 </html>
+
 
 
 
