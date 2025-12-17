@@ -296,19 +296,47 @@ const expiringPoint = useMemo(() => {
         const [year, month] = selectedMonth.split('-');
         const lastDay = new Date(Number(year), Number(month), 0).getDate();
         const endOfMonth = `${year}/${month}/${lastDay}`;
-        let total = 0;
-        let count = 0;
-        validData.forEach(row => {
-          const expireDate = row['소멸 예정일'] || '';
-          const point = Number(row['포인트']) || 0;
-          if (expireDate && expireDate.substring(0,10) <= endOfMonth && point > 0) {
-            total += point;
-            count++;
+        
+        // 사용자별 잔여 포인트와 소멸 예정 계산
+        const userExpiring = new Map();
+        
+        // 1단계: 각 사용자의 현재 잔여 포인트 (userStats에서 가져오기)
+        userStats.forEach(u => {
+          if (u.currentPoint > 0) {
+            userExpiring.set(u.id, { remaining: u.currentPoint, expiring: 0 });
           }
         });
-        console.log('소멸 예정 계산:', { endOfMonth, validDataLength: validData.length, expiringCount: count, expiringTotal: total });
+        
+        // 2단계: 각 사용자의 적립 거래 중 소멸 예정인 것 계산
+        const earnTransactions = validData.filter(r => {
+          const point = Number(r['포인트']) || 0;
+          const expireDate = r['소멸 예정일'] || '';
+          const type = r['타입'];
+          return type !== '사용' && point > 0 && expireDate && expireDate.substring(0,10) <= endOfMonth;
+        }).sort((a, b) => (a['소멸 예정일'] || '').localeCompare(b['소멸 예정일'] || ''));
+        
+        // 3단계: 사용자별로 소멸 예정 포인트 합산 (잔여 포인트 한도 내에서)
+        earnTransactions.forEach(row => {
+          const userId = row['고객ID'];
+          const point = Number(row['포인트']) || 0;
+          
+          if (userExpiring.has(userId)) {
+            const user = userExpiring.get(userId);
+            const canExpire = Math.min(point, user.remaining - user.expiring);
+            if (canExpire > 0) {
+              user.expiring += canExpire;
+            }
+          }
+        });
+        
+        // 4단계: 전체 소멸 예정 합계
+        let total = 0;
+        userExpiring.forEach(u => {
+          total += u.expiring;
+        });
+        
         return total;
-      }, [validData, selectedMonth]);
+      }, [validData, selectedMonth, showCanceled, userStats]);
 
       const earnByType = useMemo(() => {
         const map = new Map();
@@ -1137,6 +1165,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
