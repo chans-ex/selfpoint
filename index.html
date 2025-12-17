@@ -552,7 +552,7 @@ const expiringPoint = useMemo(() => {
     }
     total += userExpiring;
   });
-  
+  console.log('소멸예정 디버그:', debugInfo, '총액:', total);
   return total;
 }, [realData, selectedMonth, userStats]);
 
@@ -1188,6 +1188,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
