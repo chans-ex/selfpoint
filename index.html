@@ -503,6 +503,8 @@
       }, [monthlyAllData, realData, selectedMonth]);
 
 const expiringPoint = useMemo(() => {
+  console.log('realData 총 건수:', realData.length);
+  console.log('data 총 건수:', data.length);
   if (!selectedMonth || !userStats || userStats.length === 0) return 0;
   
   const [year, month] = selectedMonth.split('-');
@@ -1188,6 +1190,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
