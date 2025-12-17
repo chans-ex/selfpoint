@@ -503,10 +503,8 @@
       }, [monthlyAllData, realData, selectedMonth]);
 
 const expiringPoint = useMemo(() => {
-return 0; // 임시로 0 반환
-
-
-  /*
+  if (!selectedMonth || !userStats || userStats.length === 0) return 0;
+  
   const [year, month] = selectedMonth.split('-');
   const lastDay = new Date(Number(year), Number(month), 0).getDate();
   const endOfMonth = `${year}/${month}/${lastDay}`;
@@ -517,23 +515,46 @@ return 0; // 임시로 0 반환
     return d.substring(0,7).replace('/','-') <= selectedMonth;
   });
   
-  // 소멸일이 12월 말까지인 모든 적립 포인트 합계
-  let total = 0;
+  // 사용자별 잔여와 소멸 예정
+  const userExpiring = new Map();
+  userStats.forEach(u => {
+    if (u.currentPoint > 0) {
+      userExpiring.set(u.id, { remaining: u.currentPoint, expiring: 0, transactions: [] });
+    }
+  });
+  
+  // 적립 거래 수집
   allDataUntilThisMonth.forEach(r => {
+    const userId = r['고객ID'];
     const point = Number(r['포인트']) || 0;
     const expireDate = r['소멸 예정일'] || '';
     const type = r['타입'];
     
-    if (type !== '사용' && point > 0 && expireDate && expireDate.substring(0,10) <= endOfMonth) {
-      total += point;
+    if (type !== '사용' && point > 0 && expireDate && userExpiring.has(userId)) {
+      userExpiring.get(userId).transactions.push({ point, expireDate: expireDate.substring(0,10) });
     }
   });
   
+  // 사용자별 소멸 예정 계산
+  let total = 0;
+  userExpiring.forEach(user => {
+    // 소멸일 순 정렬
+    const expiringTxs = user.transactions
+      .filter(t => t.expireDate <= endOfMonth)
+      .sort((a, b) => a.expireDate.localeCompare(b.expireDate));
+    
+    let userExpiring = 0;
+    for (const tx of expiringTxs) {
+      const canExpire = Math.min(tx.point, user.remaining - userExpiring);
+      if (canExpire > 0) {
+        userExpiring += canExpire;
+      }
+    }
+    total += userExpiring;
+  });
+  
   return total;
-
-    */
-}, [realData, selectedMonth]);
-
+}, [realData, selectedMonth, userStats]);
 
       
       const mismatchCount = useMemo(() => userStats.filter(u => u.mismatch).length, [userStats]);
@@ -1167,6 +1188,7 @@ return 0; // 임시로 0 반환
   </script>
 </body>
 </html>
+
 
 
 
