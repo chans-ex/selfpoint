@@ -509,11 +509,25 @@ const expiringPoint = useMemo(() => {
   const lastDay = new Date(Number(year), Number(month), 0).getDate();
   const endOfMonth = `${year}/${month}/${lastDay}`;
 
-  // 12월까지의 모든 데이터
-  const allDataUntilThisMonth = validData.filter(r => {
-    const d = r['처리일'] || '';
-    return d.substring(0,7).replace('/','-') <= selectedMonth;
-  });
+  // validData 대신 realData 사용 (12월까지 전체 데이터)
+  const allDataUntilThisMonth = realData
+    .filter(r => {
+      const d = r['처리일'] || '';
+      return d.substring(0,7).replace('/','-') <= selectedMonth;
+    })
+    .filter(r => {
+      // validData와 동일한 필터 적용
+      if (showCanceled) return true;
+      const memo = r['관리자메모'] || '';
+      if (r['주문상태'] === '취소완료') return false;
+      if (r['타입'] !== '사용') {
+        if (memo.includes('취소 포인트') || memo.includes('취소포인트')) {
+          const match = memo.match(/(\d{10})/);
+          if (match && canceledOrderNos.has(match[1])) return false;
+        }
+      }
+      return true;
+    });
   
   // 사용자별 잔여와 소멸 예정
   const userExpiring = new Map();
@@ -557,7 +571,7 @@ const expiringPoint = useMemo(() => {
   
   console.log('총 소멸예정:', total);
   return total;
-}, [validData, selectedMonth, userStats]);
+}, [realData, selectedMonth, userStats, showCanceled, canceledOrderNos]);
 
       
       const mismatchCount = useMemo(() => userStats.filter(u => u.mismatch).length, [userStats]);
@@ -1191,6 +1205,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
