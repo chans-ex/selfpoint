@@ -540,7 +540,12 @@
             }
           }
         });
-        
+        // 4단계 전에 추가:
+console.log('소멸 예정 디버그:', {
+  usersWithRemaining: userExpiring.size,
+  totalRemaining: Array.from(userExpiring.values()).reduce((s, u) => s + u.remaining, 0),
+  totalExpiring: total
+});
         // 4단계: 전체 소멸 예정 합계
         let total = 0;
         userExpiring.forEach(u => {
@@ -1170,6 +1175,7 @@
   </script>
 </body>
 </html>
+
 
 
 
