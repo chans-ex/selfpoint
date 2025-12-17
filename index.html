@@ -508,71 +508,54 @@ const expiringPoint = useMemo(() => {
   const [year, month] = selectedMonth.split('-');
   const lastDay = new Date(Number(year), Number(month), 0).getDate();
   const endOfMonth = `${year}/${month}/${lastDay}`;
-
-  // validData 대신 realData 사용 (12월까지 전체 데이터)
-  const allDataUntilThisMonth = realData
-    .filter(r => {
-      const d = r['처리일'] || '';
-      return d.substring(0,7).replace('/','-') <= selectedMonth;
-    })
-    .filter(r => {
-      // validData와 동일한 필터 적용
-      if (showCanceled) return true;
-      const memo = r['관리자메모'] || '';
-      if (r['주문상태'] === '취소완료') return false;
-      if (r['타입'] !== '사용') {
-        if (memo.includes('취소 포인트') || memo.includes('취소포인트')) {
-          const match = memo.match(/(\d{10})/);
-          if (match && canceledOrderNos.has(match[1])) return false;
-        }
-      }
-      return true;
-    });
   
-  // 사용자별 잔여와 소멸 예정
-  const userExpiring = new Map();
+  // 사용자별 잔여 포인트 Map
+  const userRemainingMap = new Map();
   userStats.forEach(u => {
     if (u.currentPoint > 0) {
-      userExpiring.set(u.id, { remaining: u.currentPoint, expiring: 0, transactions: [] });
+      userRemainingMap.set(u.id, u.currentPoint);
     }
   });
   
-  // 적립 거래 수집
-  allDataUntilThisMonth.forEach(r => {
-    const userId = r['고객ID'];
-    const point = Number(r['포인트']) || 0;
-    const expireDate = r['소멸 예정일'] || '';
-    const type = r['타입'];
+  // realData 전체에서 적립 거래만 필터
+  const allEarnTransactions = realData
+    .filter(r => {
+      const type = r['타입'];
+      const point = Number(r['포인트']) || 0;
+      const expireDate = r['소멸 예정일'] || '';
+      const userId = r['고객ID'];
+      
+      return type !== '사용' && point > 0 && expireDate && 
+             expireDate.substring(0,10) <= endOfMonth &&
+             userRemainingMap.has(userId);
+    })
+    .map(r => ({
+      userId: r['고객ID'],
+      point: Number(r['포인트']) || 0,
+      expireDate: r['소멸 예정일'].substring(0,10)
+    }))
+    .sort((a, b) => a.expireDate.localeCompare(b.expireDate));
+  
+  console.log('전체 적립 거래:', allEarnTransactions.length, '건');
+  
+  // 사용자별로 소멸 예정 계산
+  const userExpiringMap = new Map();
+  
+  allEarnTransactions.forEach(tx => {
+    const remaining = userRemainingMap.get(tx.userId);
+    const alreadyExpiring = userExpiringMap.get(tx.userId) || 0;
     
-    if (type !== '사용' && point > 0 && expireDate && userExpiring.has(userId)) {
-      userExpiring.get(userId).transactions.push({ point, expireDate: expireDate.substring(0,10) });
+    const canExpire = Math.min(tx.point, remaining - alreadyExpiring);
+    if (canExpire > 0) {
+      userExpiringMap.set(tx.userId, alreadyExpiring + canExpire);
     }
   });
   
-  // 사용자별 소멸 예정 계산
-  let total = 0;
-  userExpiring.forEach(user => {
-    // 소멸일 순 정렬
-    const expiringTxs = user.transactions
-      .filter(t => t.expireDate <= endOfMonth)
-      .sort((a, b) => a.expireDate.localeCompare(b.expireDate));
-    
-    console.log('사용자 거래:', expiringTxs.length, '건');
-    
-    let userExpiringAmount = 0;
-    for (const tx of expiringTxs) {
-      const canExpire = Math.min(tx.point, user.remaining - userExpiringAmount);
-      if (canExpire > 0) {
-        userExpiringAmount += canExpire;
-      }
-    }
-    total += userExpiringAmount;
-  });
-  
+  const total = Array.from(userExpiringMap.values()).reduce((s, v) => s + v, 0);
   console.log('총 소멸예정:', total);
+  
   return total;
-}, [realData, selectedMonth, userStats, showCanceled, canceledOrderNos]);
-
+}, [realData, selectedMonth, userStats]);
       
       const mismatchCount = useMemo(() => userStats.filter(u => u.mismatch).length, [userStats]);
       const filteredEarnByType = useMemo(() => !searchTerm ? earnByType : earnByType.filter(e => e.memo.toLowerCase().includes(searchTerm.toLowerCase())), [earnByType, searchTerm]);
@@ -1205,6 +1188,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
