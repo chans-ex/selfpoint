@@ -325,36 +325,33 @@
           }
         });
         
-        // 최종 토탈포인트 계산
+       // 최종 토탈포인트 계산: 가장 마지막 날짜의 거래들을 분석
         map.forEach((u, id) => {
-          let finalTotal = 0;
-          let lastDate = '';
+          if (u.transactions.length === 0) {
+            u.currentPoint = 0;
+            return;
+          }
           
-          // 주문번호별로 처리
-          const processedOrders = new Set();
+          // 시간순 정렬
+          const sortedTx = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
+          const lastDate = sortedTx[sortedTx.length - 1].date;
+          const lastDateTxs = sortedTx.filter(tx => tx.date === lastDate);
           
-          u.transactions.sort((a,b) => a.date.localeCompare(b.date)).forEach(tx => {
-            if (tx.orderNo && tx.orderNo !== '-') {
-              // 같은 주문번호는 한 번만 처리
-              if (!processedOrders.has(tx.orderNo)) {
-                processedOrders.add(tx.orderNo);
-                const group = u.orderGroups.get(tx.orderNo);
-                if (group) {
-                  // 시작 토탈 + 포인트 변화량 합계
-                  const pointSum = group.points.reduce((sum, p) => sum + p, 0);
-                  const groupStartTotal = Math.max(...group.totals);
-                  finalTotal = groupStartTotal + pointSum;
-                  lastDate = tx.date;
-                }
-              }
-            } else {
-              // 주문번호 없는 거래는 개별 처리
-              finalTotal = tx.total;
-              lastDate = tx.date;
-            }
-          });
+          // 마지막 날짜에 주문번호가 있는 거래가 있는지 확인
+          const lastOrderNos = [...new Set(lastDateTxs.filter(tx => tx.orderNo && tx.orderNo !== '-').map(tx => tx.orderNo))];
           
-          u.currentPoint = finalTotal || 0;
+          if (lastOrderNos.length > 0) {
+            // 마지막 날짜에 주문번호가 있으면, 그 주문번호들의 모든 거래 찾기
+            const orderTxs = sortedTx.filter(tx => lastOrderNos.includes(tx.orderNo));
+            
+            // 해당 주문들의 토탈포인트 중 최댓값 = 주문 완료 후 최종 포인트
+            const maxTotal = Math.max(...orderTxs.map(tx => tx.total));
+            
+            u.currentPoint = maxTotal;
+          } else {
+            // 주문번호 없으면 마지막 날짜 거래들 중 최솟값 (최종 상태)
+            u.currentPoint = Math.min(...lastDateTxs.map(tx => tx.total));
+          }
         });
         
         if (selectedMonth) {
@@ -974,5 +971,6 @@
   </script>
 </body>
 </html>
+
 
 
