@@ -545,7 +545,7 @@ const expiringPoint = useMemo(() => {
     
     let userExpiringAmount = 0;
     for (const tx of expiringTxs) {
-      const canExpire = Math.min(tx.point, user.remaining - userExpiring);
+      const canExpire = Math.min(tx.point, user.remaining - userExpiringAmount);
       if (canExpire > 0) {
         userExpiringAmount += canExpire;
       }
@@ -1188,6 +1188,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
