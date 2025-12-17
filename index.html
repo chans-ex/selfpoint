@@ -544,14 +544,14 @@ console.log('소멸 예정 상세:', {
        
   
         
-        // 3단계: 사용자별로 소멸 예정 포인트 합산 (잔여 포인트 한도 내에서)
+            // 3단계: 사용자별로 소멸 예정 포인트 합산 (잔여 포인트 한도 내에서)
         earnTransactions.forEach(row => {
           const userId = row['고객ID'];
           const point = Number(row['포인트']) || 0;
           
           if (userExpiring.has(userId)) {
             const user = userExpiring.get(userId);
-            const canExpire = Math.min(point, user.remaining - user.expiring);
+            const canExpire = Math.min(point, Math.max(0, user.remaining - user.expiring));
             if (canExpire > 0) {
               user.expiring += canExpire;
             }
@@ -1193,6 +1193,7 @@ console.log('소멸 예정 상세:', {
   </script>
 </body>
 </html>
+
 
 
 
