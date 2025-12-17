@@ -680,13 +680,15 @@ return 0; // 임시로 0 반환
                 </button>
               ) : (
                 <>
-                  <input 
-                    type="text" 
-                    placeholder="기본 시트 사용 중 (변경 가능)" 
-                    value={sheetUrl} 
-                    onChange={(e) => setSheetUrl(e.target.value)}
-                    style={{ ...inputStyle, width: '300px' }}
-                  />
+                 <button onClick={() => {
+                    const newUrl = prompt('구글 시트 URL을 입력하세요', sheetUrl);
+                    if (newUrl) {
+                      setSheetUrl(newUrl);
+                      localStorage.setItem('savedSheetUrl', newUrl);
+                    }
+                  }} style={{ ...btnStyle, backgroundColor: '#f59e0b' }}>
+                    시트 변경
+                  </button>
                   <button onClick={handleLoadSheet} style={{ ...btnStyle, backgroundColor: '#34a853' }}>
                     시트 로드
                   </button>
@@ -1165,6 +1167,7 @@ return 0; // 임시로 0 반환
   </script>
 </body>
 </html>
+
 
 
 
