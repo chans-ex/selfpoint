@@ -137,9 +137,42 @@
         if (!selectedMonth) return 0;
         const prevData = validData.filter(row => { const d = row['처리일'] || ''; return d.substring(0,7).replace('/','-') < selectedMonth; });
         if (prevData.length === 0) return 0;
-        const userLast = new Map();
-        prevData.sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||'')).forEach(r => userLast.set(r['고객ID'], Number(r['토탈포인트'])||0));
-        return Array.from(userLast.values()).reduce((s,v) => s+v, 0);
+
+        // 사용자별로 동일한 로직 적용
+        const userMap = new Map();
+        prevData.sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||'')).forEach(r => {
+          const id = r['고객ID'];
+          const date = r['처리일'] || '';
+          const total = Number(r['토탈포인트']) || 0;
+          const point = Number(r['포인트']) || 0;
+          const orderNo = r['주문번호'] || '';
+          
+          if (!userMap.has(id)) userMap.set(id, { transactions: [] });
+          userMap.get(id).transactions.push({ date, total, point, orderNo });
+        });
+        
+        // 각 사용자의 마지막 currentPoint 계산
+        let totalCarryover = 0;
+        userMap.forEach((user, id) => {
+          const sortedTx = [...user.transactions].sort((a,b) => a.date.localeCompare(b.date));
+          const lastDate = sortedTx[sortedTx.length - 1].date;
+          const lastDateTxs = sortedTx.filter(tx => tx.date === lastDate);
+          
+          const lastOrderNos = [...new Set(lastDateTxs.filter(tx => tx.orderNo && tx.orderNo !== '-').map(tx => tx.orderNo))];
+          
+          let currentPoint = 0;
+          if (lastOrderNos.length > 0) {
+            const orderTxs = sortedTx.filter(tx => lastOrderNos.includes(tx.orderNo));
+            const hasEarn = lastDateTxs.some(tx => tx.point > 0);
+            currentPoint = hasEarn ? Math.max(...orderTxs.map(tx => tx.total)) : Math.min(...orderTxs.map(tx => tx.total));
+          } else {
+            currentPoint = Math.min(...lastDateTxs.map(tx => tx.total));
+          }
+          
+          totalCarryover += currentPoint;
+        });
+        
+        return totalCarryover;
       }, [validData, selectedMonth]);
 
       const monthlyTotals = useMemo(() => {
@@ -971,6 +1004,7 @@
   </script>
 </body>
 </html>
+
 
 
 
