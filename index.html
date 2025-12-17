@@ -122,8 +122,12 @@
       const [expandedEarn, setExpandedEarn] = useState(null);
       const [expandedCancel, setExpandedCancel] = useState(null);
       const [showMismatchOnly, setShowMismatchOnly] = useState(false);
-      const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
-      const [googleAccessToken, setGoogleAccessToken] = useState('');
+         const [googleAccessToken, setGoogleAccessToken] = useState(() => {
+        return localStorage.getItem('googleAccessToken') || '';
+      });
+      const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(() => {
+        return !!localStorage.getItem('googleAccessToken');
+      });
       const [sheetUrl, setSheetUrl] = useState('');
 
       
@@ -151,6 +155,7 @@
           callback: (response) => {
             setGoogleAccessToken(response.access_token);
             setIsGoogleSignedIn(true);
+            localStorage.setItem('googleAccessToken', response.access_token);
           },
         });
         client.requestAccessToken();
@@ -1129,6 +1134,7 @@
   </script>
 </body>
 </html>
+
 
 
 
