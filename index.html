@@ -511,13 +511,25 @@ const expiringPoint = useMemo(() => {
   const lastDay = new Date(Number(year), Number(month), 0).getDate();
   const endOfMonth = `${year}/${month}/${lastDay}`;
   
-  // 사용자별 잔여 포인트 Map
+// 사용자별 잔여 포인트 Map (realData 전체로 계산)
   const userRemainingMap = new Map();
-  userStats.forEach(u => {
-    if (u.currentPoint > 0) {
-      userRemainingMap.set(u.id, u.currentPoint);
+    const tempUserMap = new Map();
+  realData
+    .sort((a, b) => (a['처리일'] || '').localeCompare(b['처리일'] || ''))
+    .forEach(r => {
+      const userId = r['고객ID'];
+      const point = Number(r['포인트']) || 0;
+      if (!tempUserMap.has(userId)) tempUserMap.set(userId, 0);
+      tempUserMap.set(userId, tempUserMap.get(userId) + point);
+    });
+  
+  tempUserMap.forEach((remaining, userId) => {
+    if (remaining > 0) {
+      userRemainingMap.set(userId, remaining);
     }
   });
+  
+  console.log('재계산된 userRemainingMap 크기:', userRemainingMap.size);
 
  // ← 여기에 3줄 추가!
   console.log('realData에서 적립 거래:', realData.filter(r => r['타입'] !== '사용' && (Number(r['포인트']) || 0) > 0).length, '건');
@@ -1196,6 +1208,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
