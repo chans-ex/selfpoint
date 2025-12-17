@@ -293,6 +293,8 @@
 
 const expiringPoint = useMemo(() => {
         if (!selectedMonth) return 0;
+  if (!userStats || userStats.length === 0) return 0;
+  
         const [year, month] = selectedMonth.split('-');
         const lastDay = new Date(Number(year), Number(month), 0).getDate();
         const endOfMonth = `${year}/${month}/${lastDay}`;
@@ -1165,6 +1167,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
