@@ -359,13 +359,14 @@
           prevData.forEach(r => prevUser.set(r['고객ID'], Number(r['토탈포인트'])||0));
           map.forEach((u, id) => {
             if (prevUser.has(id)) u.startPoint = prevUser.get(id);
-            else if (u.transactions.length > 0) {
+             else if (u.transactions.length > 0) {
               const sortedTx = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
               const firstDate = sortedTx[0].date;
               const sameDateTx = sortedTx.filter(t => t.date === firstDate);
-              const minTotal = Math.min(...sameDateTx.map(t => t.total));
+              const hasEarnFirst = sameDateTx.some(t => t.point > 0);
+              const baseTotal = hasEarnFirst ? Math.max(...sameDateTx.map(t => t.total)) : Math.min(...sameDateTx.map(t => t.total));
               const sumPoints = sameDateTx.reduce((s, t) => s + t.point, 0);
-              u.startPoint = minTotal - sumPoints;
+              u.startPoint = baseTotal - sumPoints;
             }
             u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
@@ -970,6 +971,7 @@
   </script>
 </body>
 </html>
+
 
 
 
