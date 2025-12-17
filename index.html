@@ -291,19 +291,22 @@
         return { used, earned, canceled, carryover: carryoverPoint, balance: carryoverPoint + earned + used + canceled };
       }, [useData, earnData, cancelData, carryoverPoint]);
 
-      const expiringPoint = useMemo(() => {
+const expiringPoint = useMemo(() => {
         if (!selectedMonth) return 0;
         const [year, month] = selectedMonth.split('-');
         const lastDay = new Date(Number(year), Number(month), 0).getDate();
         const endOfMonth = `${year}/${month}/${lastDay}`;
         let total = 0;
+        let count = 0;
         validData.forEach(row => {
           const expireDate = row['소멸 예정일'] || '';
           const point = Number(row['포인트']) || 0;
           if (expireDate && expireDate.substring(0,10) <= endOfMonth && point > 0) {
             total += point;
+            count++;
           }
         });
+        console.log('소멸 예정 계산:', { endOfMonth, validDataLength: validData.length, expiringCount: count, expiringTotal: total });
         return total;
       }, [validData, selectedMonth]);
 
@@ -1134,6 +1137,7 @@
   </script>
 </body>
 </html>
+
 
 
 
