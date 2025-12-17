@@ -543,6 +543,8 @@ const expiringPoint = useMemo(() => {
       .filter(t => t.expireDate <= endOfMonth)
       .sort((a, b) => a.expireDate.localeCompare(b.expireDate));
     
+    console.log('사용자 거래:', expiringTxs.length, '건');
+    
     let userExpiringAmount = 0;
     for (const tx of expiringTxs) {
       const canExpire = Math.min(tx.point, user.remaining - userExpiringAmount);
@@ -552,7 +554,8 @@ const expiringPoint = useMemo(() => {
     }
     total += userExpiringAmount;
   });
- 
+  
+  console.log('총 소멸예정:', total);
   return total;
 }, [validData, selectedMonth, userStats]);
 
@@ -1188,6 +1191,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
