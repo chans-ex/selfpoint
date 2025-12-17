@@ -342,7 +342,7 @@
                 if (group) {
                   // 시작 토탈 + 포인트 변화량 합계
                   const pointSum = group.points.reduce((sum, p) => sum + p, 0);
-                  const groupStartTotal = Math.min(...group.totals.map((t, i) => t - group.points.slice(0, i+1).reduce((s,p) => s+p, 0)));
+                  const groupStartTotal = Math.max(...group.totals);
                   finalTotal = groupStartTotal + pointSum;
                   lastDate = tx.date;
                 }
@@ -974,4 +974,5 @@
   </script>
 </body>
 </html>
+
 
