@@ -546,10 +546,16 @@ console.log('소멸 예정 디버그:', {
   totalRemaining: Array.from(userExpiring.values()).reduce((s, u) => s + u.remaining, 0),
   totalExpiring: total
 });
-        // 4단계: 전체 소멸 예정 합계
+       // 4단계: 전체 소멸 예정 합계
         let total = 0;
         userExpiring.forEach(u => {
           total += u.expiring;
+        });
+        
+        console.log('소멸 예정 디버그:', {
+          usersWithRemaining: userExpiring.size,
+          totalRemaining: Array.from(userExpiring.values()).reduce((s, u) => s + u.remaining, 0),
+          totalExpiring: total  // ← total이 계산된 후 로그
         });
         
         return total;
@@ -1175,6 +1181,7 @@ console.log('소멸 예정 디버그:', {
   </script>
 </body>
 </html>
+
 
 
 
