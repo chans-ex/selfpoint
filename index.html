@@ -481,9 +481,34 @@
         });
         
         if (selectedMonth) {
-          const prevData = realData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
+           const prevData = realData.filter(r => (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth).sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||''));
           const prevUser = new Map();
-          prevData.forEach(r => prevUser.set(r['고객ID'], Number(r['토탈포인트'])||0));
+          
+          // 사용자별로 그룹화해서 마지막 토탈포인트 계산
+          const prevUserMap = new Map();
+          prevData.forEach(r => {
+            const id = r['고객ID'];
+            if (!prevUserMap.has(id)) prevUserMap.set(id, []);
+            prevUserMap.get(id).push({ date: r['처리일'], total: Number(r['토탈포인트'])||0, orderNo: r['주문번호']||'' });
+          });
+          
+          prevUserMap.forEach((transactions, id) => {
+            const lastDate = transactions[transactions.length - 1].date;
+            const lastDateTxs = transactions.filter(tx => tx.date === lastDate);
+            const lastOrderNos = [...new Set(lastDateTxs.filter(tx => tx.orderNo && tx.orderNo !== '-').map(tx => tx.orderNo))];
+            
+            let finalTotal = 0;
+            if (lastOrderNos.length > 0) {
+              const orderTxs = transactions.filter(tx => lastOrderNos.includes(tx.orderNo));
+              finalTotal = Math.min(...orderTxs.map(tx => tx.total));
+            } else {
+              finalTotal = Math.min(...lastDateTxs.map(tx => tx.total));
+            }
+            
+            prevUser.set(id, finalTotal);
+          });
+
+          
           map.forEach((u, id) => {
             if (prevUser.has(id)) u.startPoint = prevUser.get(id);
              else if (u.transactions.length > 0) {
@@ -1208,6 +1233,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
