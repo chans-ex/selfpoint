@@ -273,6 +273,18 @@
           if (lastOrderNos.length > 0) {
             const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
             currentPoint = lastDateOrderTxs[lastDateOrderTxs.length - 1].total;
+
+ // 상세 디버깅
+              if (id === 'TMPDSc0a02a4998a6448') {
+                console.log('TMPDSc0a02a4998a6448 상세:', {
+                  lastDate,
+                  lastDateTxs: lastDateTxs.length,
+                  lastOrderNos,
+                  lastDateOrderTxs: lastDateOrderTxs.map(tx => ({ date: tx.date, total: tx.total, orderNo: tx.orderNo })),
+                  currentPoint
+                });
+              }
+            
           } else {
             currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
           }
@@ -507,10 +519,22 @@ prevUserMap.forEach((transactions, id) => {
             if (lastOrderNos.length > 0) {
               const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
               currentPoint = lastDateOrderTxs[lastDateOrderTxs.length - 1].total;
-            } else {
-              currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
-            }
+            } 
             
+            // 여기에 로그 추가!
+              if (id === 'TMPDSc0a02a4998a6448') {
+                console.log('TMPDSc0a02a4998a6448 prevUserMap 상세:', {
+                  lastDate,
+                  lastDateTxs: lastDateTxs.length,
+                  lastOrderNos,
+                  lastDateOrderTxs: lastDateOrderTxs.map(tx => ({ date: tx.date, total: tx.total, orderNo: tx.orderNo })),
+                  currentPoint
+                });
+              }
+            }else {
+              currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
+            }             
+                        
             prevUser.set(id, currentPoint);
    // 디버깅
             if (id === 'TMPDSc0a02a4998a6448') {
@@ -1243,6 +1267,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
