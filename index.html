@@ -492,7 +492,7 @@
             prevUserMap.get(id).push({ date: r['처리일'], total: Number(r['토탈포인트'])||0, orderNo: r['주문번호']||'' });
           });
           
-          prevUserMap.forEach((transactions, id) => {
+  prevUserMap.forEach((transactions, id) => {
             const lastDate = transactions[transactions.length - 1].date;
             const lastDateTxs = transactions.filter(tx => tx.date === lastDate);
             const lastOrderNos = [...new Set(lastDateTxs.filter(tx => tx.orderNo && tx.orderNo !== '-').map(tx => tx.orderNo))];
@@ -500,14 +500,23 @@
             let finalTotal = 0;
             if (lastOrderNos.length > 0) {
               const orderTxs = transactions.filter(tx => lastOrderNos.includes(tx.orderNo));
-              finalTotal = Math.min(...orderTxs.map(tx => tx.total));
+              // 마지막 날짜 거래들의 토탈 범위 확인
+              const lastTotals = lastDateTxs.map(tx => tx.total);
+              const hasIncrease = Math.max(...lastTotals) > Math.min(...lastTotals);
+              
+              if (hasIncrease) {
+                // 증가가 있으면 최댓값
+                finalTotal = Math.max(...orderTxs.map(tx => tx.total));
+              } else {
+                // 감소만 있으면 최솟값
+                finalTotal = Math.min(...orderTxs.map(tx => tx.total));
+              }
             } else {
               finalTotal = Math.min(...lastDateTxs.map(tx => tx.total));
             }
             
             prevUser.set(id, finalTotal);
           });
-
           
           map.forEach((u, id) => {
             if (prevUser.has(id)) u.startPoint = prevUser.get(id);
@@ -1233,6 +1242,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
