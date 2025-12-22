@@ -508,7 +508,7 @@ prevUserMap.forEach((transactions, id) => {
             if (lastOrderNos.length > 0) {
               const orderTxs = sortedTx.filter(tx => lastOrderNos.includes(tx.orderNo));
               const orderTotals = orderTxs.map(tx => tx.total);
-              const hasEarn = Math.max(...orderTotals) > orderTotals[0];
+              const hasEarn = Math.max(...orderTotals) > Math.min(...orderTotals); // 수정!
               currentPoint = hasEarn ? Math.max(...orderTotals) : Math.min(...orderTotals);
             } else {
               currentPoint = Math.min(...lastDateTxs.map(tx => tx.total));
@@ -517,21 +517,42 @@ prevUserMap.forEach((transactions, id) => {
             prevUser.set(id, currentPoint);
           });
           
-          map.forEach((u, id) => {
-            if (prevUser.has(id)) u.startPoint = prevUser.get(id);
-             else if (u.transactions.length > 0) {
-              const sortedTx = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
-              const firstDate = sortedTx[0].date;
-              const sameDateTx = sortedTx.filter(t => t.date === firstDate);
-              const hasEarnFirst = sameDateTx.some(t => t.point > 0);
-              const baseTotal = hasEarnFirst ? Math.max(...sameDateTx.map(t => t.total)) : Math.min(...sameDateTx.map(t => t.total));
-              const sumPoints = sameDateTx.reduce((s, t) => s + t.point, 0);
-              u.startPoint = baseTotal - sumPoints;
+        map.forEach((u, id) => {
+            if (prevUser.has(id)) {
+              u.startPoint = prevUser.get(id);
+            } else {
+              // 과거 전체 데이터에서 가장 최근 시점 찾기
+              const pastData = realData.filter(r => r['고객ID'] === id && (r['처리일']||'').substring(0,7).replace('/','-') < selectedMonth);
+              if (pastData.length > 0) {
+                const pastTxs = pastData.sort((a,b) => (a['처리일']||'').localeCompare(b['처리일']||'')).map(r => ({
+                  date: r['처리일'],
+                  total: Number(r['토탈포인트'])||0,
+                  orderNo: r['주문번호']||'',
+                  point: Number(r['포인트'])||0
+                }));
+                
+                const lastDate = pastTxs[pastTxs.length - 1].date;
+                const lastDateTxs = pastTxs.filter(tx => tx.date === lastDate);
+                const lastOrderNos = [...new Set(lastDateTxs.filter(tx => tx.orderNo && tx.orderNo !== '-').map(tx => tx.orderNo))];
+                
+                if (lastOrderNos.length > 0) {
+                  const orderTxs = pastTxs.filter(tx => lastOrderNos.includes(tx.orderNo));
+                  const orderTotals = orderTxs.map(tx => tx.total);
+                  const hasEarn = Math.max(...orderTotals) > Math.min(...orderTotals);
+                  u.startPoint = hasEarn ? Math.max(...orderTotals) : Math.min(...orderTotals);
+                } else {
+                  u.startPoint = Math.min(...lastDateTxs.map(tx => tx.total));
+                }
+              } else if (u.transactions.length > 0) {
+                // 신규 가입자: 첫 거래 기준 계산
+                const sortedTx = [...u.transactions].sort((a,b) => a.date.localeCompare(b.date));
+                const firstDateTxs = sortedTx.filter(t => t.date === sortedTx[0].date);
+                u.startPoint = Math.min(...firstDateTxs.map(t => t.total)) - firstDateTxs.reduce((s, t) => s + t.point, 0);
+              }
             }
             u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
-        }
         return Array.from(map.values()).filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0 || u.canceledPoint !== 0).sort((a,b) => a.usedPoint - b.usedPoint);
       }, [monthlyAllData, realData, selectedMonth]);
 
@@ -1241,6 +1262,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
