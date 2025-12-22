@@ -506,12 +506,10 @@ prevUserMap.forEach((transactions, id) => {
             
             let currentPoint = 0;
             if (lastOrderNos.length > 0) {
-              const orderTxs = sortedTx.filter(tx => lastOrderNos.includes(tx.orderNo));
-              const orderTotals = orderTxs.map(tx => tx.total);
-              const hasEarn = Math.max(...orderTotals) > Math.min(...orderTotals); // 수정!
-              currentPoint = hasEarn ? Math.max(...orderTotals) : Math.min(...orderTotals);
+              const lastDateOrderTxs = lastDateTxs.filter(tx => lastOrderNos.includes(tx.orderNo));
+              currentPoint = lastDateOrderTxs[lastDateOrderTxs.length - 1].total;
             } else {
-              currentPoint = Math.min(...lastDateTxs.map(tx => tx.total));
+              currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
             }
             
             prevUser.set(id, currentPoint);
@@ -1263,6 +1261,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
