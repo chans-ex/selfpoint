@@ -553,6 +553,7 @@ prevUserMap.forEach((transactions, id) => {
             u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
+        }
         return Array.from(map.values()).filter(u => u.usedPoint !== 0 || u.earnedPoint !== 0 || u.canceledPoint !== 0).sort((a,b) => a.usedPoint - b.usedPoint);
       }, [monthlyAllData, realData, selectedMonth]);
 
@@ -1262,6 +1263,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
