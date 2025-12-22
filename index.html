@@ -513,13 +513,25 @@ prevUserMap.forEach((transactions, id) => {
             }
             
             prevUser.set(id, currentPoint);
+   // 디버깅
+            if (id === 'TMPDSc0a02a4998a6448') {
+              console.log('TMPDSc0a02a4998a6448 prevUser 설정:', currentPoint);
+            }
+          
           });
           
         map.forEach((u, id) => {
             if (prevUser.has(id)) {
               u.startPoint = prevUser.get(id);
-                        }
-            u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
+                       
+ // 디버깅
+              if (id === 'TMPDSc0a02a4998a6448') {
+                console.log('TMPDSc0a02a4998a6448 startPoint 설정:', u.startPoint);
+              }
+            }
+          
+          
+          u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
         }
@@ -1232,6 +1244,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
