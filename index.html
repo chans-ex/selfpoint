@@ -506,7 +506,7 @@ prevUserMap.forEach((transactions, id) => {
             
             let currentPoint = 0;
             if (lastOrderNos.length > 0) {
-              const lastDateOrderTxs = lastDateTxs.filter(tx => lastOrderNos.includes(tx.orderNo));
+              const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
               currentPoint = lastDateOrderTxs[lastDateOrderTxs.length - 1].total;
             } else {
               currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
@@ -1244,6 +1244,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
