@@ -284,11 +284,9 @@
                   currentPoint
                 });
               }
-             } else {
-            currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
           }
-          
-          totalCarryover += currentPoint;
+          else {            currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
+          }         totalCarryover += currentPoint;
         });
         
         return totalCarryover;
@@ -520,7 +518,7 @@ prevUserMap.forEach((transactions, id) => {
               currentPoint = lastDateOrderTxs[lastDateOrderTxs.length - 1].total;
             } 
             
-            // 여기에 로그 추가!
+            // 로그
               if (id === 'TMPDSc0a02a4998a6448') {
                 console.log('TMPDSc0a02a4998a6448 prevUserMap 상세:', {
                   lastDate,
@@ -1266,6 +1264,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
