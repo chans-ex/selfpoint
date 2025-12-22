@@ -269,13 +269,12 @@
           
           const lastOrderNos = [...new Set(lastDateTxs.filter(tx => tx.orderNo && tx.orderNo !== '-').map(tx => tx.orderNo))];
           
-          let currentPoint = 0;
+        let currentPoint = 0;
           if (lastOrderNos.length > 0) {
-            const orderTxs = sortedTx.filter(tx => lastOrderNos.includes(tx.orderNo));
-            const hasEarn = lastDateTxs.some(tx => tx.point > 0);
-            currentPoint = hasEarn ? Math.max(...orderTxs.map(tx => tx.total)) : Math.min(...orderTxs.map(tx => tx.total));
+            const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
+            currentPoint = lastDateOrderTxs[lastDateOrderTxs.length - 1].total;
           } else {
-            currentPoint = Math.min(...lastDateTxs.map(tx => tx.total));
+            currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
           }
           
           totalCarryover += currentPoint;
@@ -1244,6 +1243,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
