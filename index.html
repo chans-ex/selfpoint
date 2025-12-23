@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -516,9 +517,8 @@ prevUserMap.forEach((transactions, id) => {
             if (lastOrderNos.length > 0) {
               const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
               currentPoint = lastDateOrderTxs[lastDateOrderTxs.length - 1].total;
-            } 
-            
-            // 로그
+              
+              // 로그
               if (id === 'TMPDSc0a02a4998a6448') {
                 console.log('TMPDSc0a02a4998a6448 prevUserMap 상세:', {
                   lastDate,
