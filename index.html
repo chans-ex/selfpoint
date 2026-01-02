@@ -613,6 +613,19 @@ const expiringPoint = useMemo(() => {
   console.log('소멸 대상 적립 거래:', allEarnTransactions.length, '건');
   console.log('소멸 예정 포인트:', total);
   
+    // 사용자별 소멸 예정 포인트 상세
+  console.log('\n=== 사용자별 소멸 예정 내역 ===');
+  const sortedExpiring = Array.from(userExpiringMap.entries())
+    .sort((a, b) => b[1] - a[1]);  // 소멸 금액 큰 순서대로
+  
+  sortedExpiring.forEach(([userId, expiringAmount]) => {
+    const userName = realData.find(r => r['고객ID'] === userId)?.[' 고객명'] || '(이름없음)';
+    const remaining = userRemainingMap.get(userId);
+    console.log(`${userId} (${userName}): 소멸예정 ${expiringAmount}, 잔여 ${remaining}`);
+  });
+  
+
+  
   return total;
 }, [realData, selectedMonth, userStats]);
       
@@ -1247,6 +1260,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
