@@ -553,7 +553,7 @@ const expiringPoint = useMemo(() => {
   
   const [year, month] = selectedMonth.split('-');
   const lastDay = new Date(Number(year), Number(month), 0).getDate();
-  const endOfMonth = `${year}/${month}/${lastDay}`;
+  const endOfMonth = `${year}/${month.padStart(2, '0')}/${String(lastDay).padStart(2, '0')}`;
   
 // 사용자별 잔여 포인트 Map (realData 전체로 계산)
   const userRemainingMap = new Map();
@@ -1268,6 +1268,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
