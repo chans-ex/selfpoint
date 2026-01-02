@@ -274,8 +274,6 @@
           if (lastOrderNos.length > 0) {
             const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
             currentPoint = lastDateOrderTxs[0].total;
-
-              }
           } else {
              currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
           }         
@@ -1249,6 +1247,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
