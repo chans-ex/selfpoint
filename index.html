@@ -276,9 +276,10 @@
             currentPoint = lastDateOrderTxs[0].total;
 
               }
-          }
-          else {            currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
-          }         totalCarryover += currentPoint;
+          } else {            
+            currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
+          }         
+        totalCarryover += currentPoint;
         });
         
         return totalCarryover;
@@ -1248,6 +1249,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
