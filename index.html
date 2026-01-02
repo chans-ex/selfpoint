@@ -275,15 +275,6 @@
             const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
             currentPoint = lastDateOrderTxs[0].total;
 
- // 상세 디버깅
-              if (id === 'TMPDS9ede52b464094e5') {
-                console.log('TMPDS9ede52b464094e5 상세:', {
-                  lastDate,
-                  lastDateTxs: lastDateTxs.length,
-                  lastOrderNos,
-                  lastDateOrderTxs: lastDateOrderTxs.map(tx => ({ date: tx.date, total: tx.total, orderNo: tx.orderNo })),
-                  currentPoint
-                });
               }
           }
           else {            currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
@@ -298,7 +289,18 @@
         useData.forEach(r => { used += Number(r['포인트'])||0; });
         earnData.forEach(r => { earned += Number(r['포인트'])||0; });
         cancelData.forEach(r => { canceled += Number(r['포인트'])||0; });
-        return { used, earned, canceled, carryover: carryoverPoint, balance: carryoverPoint + earned + used + canceled };
+        
+        const balance = carryoverPoint + earned + used + canceled;
+        
+        console.log('=== 잔여(balance) 계산 ===');
+        console.log('전월이월:', carryoverPoint);
+        console.log('적립:', earned, '(건수:', earnData.length, ')');
+        console.log('사용:', used, '(건수:', useData.length, ')');
+        console.log('적립취소:', canceled, '(건수:', cancelData.length, ')');
+        console.log('계산식:', carryoverPoint, '+', earned, '+', used, '+', canceled, '=', balance);
+        console.log('잔여:', balance);
+        
+        return { used, earned, canceled, carryover: carryoverPoint, balance };
       }, [useData, earnData, cancelData, carryoverPoint]);
 
 
@@ -518,25 +520,12 @@ prevUserMap.forEach((transactions, id) => {
               const lastDateOrderTxs = sortedTx.filter(tx => tx.date === lastDate && lastOrderNos.includes(tx.orderNo));
               currentPoint = lastDateOrderTxs[0].total;
               
-              // 로그
-              if (id === 'TMPDS9ede52b464094e5') {
-                console.log('TMPDS9ede52b464094e5 prevUserMap 상세:', {
-                  lastDate,
-                  lastDateTxs: lastDateTxs.length,
-                  lastOrderNos,
-                  lastDateOrderTxs: lastDateOrderTxs.map(tx => ({ date: tx.date, total: tx.total, orderNo: tx.orderNo })),
-                  currentPoint
-                });
-              }
+          
             } else {
               currentPoint = lastDateTxs[lastDateTxs.length - 1].total;
             }             
                         
             prevUser.set(id, currentPoint);
-   // 디버깅
-            if (id === 'TMPDS9ede52b464094e5') {
-              console.log('TMPDS9ede52b464094e5 prevUser 설정:', currentPoint);
-            }
           
           });
           
@@ -544,13 +533,7 @@ prevUserMap.forEach((transactions, id) => {
             if (prevUser.has(id)) {
               u.startPoint = prevUser.get(id);
                        
- // 디버깅
-              if (id === 'TMPDS9ede52b464094e5') {
-                console.log('TMPDS9ede52b464094e5 startPoint 설정:', u.startPoint);
-              }
-            }
-          
-          
+         
           u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
           });
@@ -559,8 +542,6 @@ prevUserMap.forEach((transactions, id) => {
       }, [monthlyAllData, realData, selectedMonth]);
 
 const expiringPoint = useMemo(() => {
-  console.log('realData 총 건수:', realData.length);
-  console.log('data 총 건수:', data.length);
   if (!selectedMonth || !userStats || userStats.length === 0) return 0;
   
   const [year, month] = selectedMonth.split('-');
@@ -584,13 +565,10 @@ const expiringPoint = useMemo(() => {
       userRemainingMap.set(userId, remaining);
     }
   });
-  
-  console.log('재계산된 userRemainingMap 크기:', userRemainingMap.size);
+
 
  // ← 여기에 3줄 추가!
-  console.log('realData에서 적립 거래:', realData.filter(r => r['타입'] !== '사용' && (Number(r['포인트']) || 0) > 0).length, '건');
-  console.log('소멸일 있는 거래:', realData.filter(r => r['소멸 예정일']).length, '건');
-  console.log('userRemainingMap 크기:', userRemainingMap.size);
+
   
   
   // realData 전체에서 적립 거래만 필터
@@ -611,8 +589,7 @@ const expiringPoint = useMemo(() => {
       expireDate: r['소멸 예정일'].substring(0,10)
     }))
     .sort((a, b) => a.expireDate.localeCompare(b.expireDate));
-  
-  console.log('전체 적립 거래:', allEarnTransactions.length, '건');
+
   
   // 사용자별로 소멸 예정 계산
   const userExpiringMap = new Map();
@@ -628,7 +605,14 @@ const expiringPoint = useMemo(() => {
   });
   
   const total = Array.from(userExpiringMap.values()).reduce((s, v) => s + v, 0);
-  console.log('총 소멸예정:', total);
+ 
+   // 기존 로그들 모두 삭제하고 여기에 새로운 로그 추가
+  console.log('=== 소멸예정(expiringPoint) 계산 ===');
+  console.log('선택된 월:', selectedMonth);
+  console.log('월말 기준일:', endOfMonth);
+  console.log('잔여 포인트 있는 사용자:', userRemainingMap.size, '명');
+  console.log('소멸 대상 적립 거래:', allEarnTransactions.length, '건');
+  console.log('소멸 예정 포인트:', total);
   
   return total;
 }, [realData, selectedMonth, userStats]);
@@ -1264,6 +1248,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
