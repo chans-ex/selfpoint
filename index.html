@@ -531,7 +531,7 @@ prevUserMap.forEach((transactions, id) => {
         map.forEach((u, id) => {
             if (prevUser.has(id)) {
               u.startPoint = prevUser.get(id);
-                       
+            }
          
           u.calculatedPoint = u.startPoint + u.earnedPoint + u.usedPoint + u.canceledPoint;
             u.mismatch = Math.abs(u.calculatedPoint - u.currentPoint) > 1;
@@ -1247,6 +1247,7 @@ const expiringPoint = useMemo(() => {
   </script>
 </body>
 </html>
+
 
 
 
